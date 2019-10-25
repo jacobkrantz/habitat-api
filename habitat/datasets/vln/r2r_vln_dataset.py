@@ -39,6 +39,31 @@ class VLNDatasetV1(Dataset):
             config.DATA_PATH.format(split=config.SPLIT)
         ) and os.path.exists(config.SCENES_DIR)
 
+    @staticmethod
+    def get_scenes_to_load(config: Config) -> List[str]:
+        r"""Return list of scene ids
+        """
+        assert VLNDatasetV1.check_config_paths_exist(config)
+        dataset_dir = os.path.dirname(
+            config.DATA_PATH.format(split=config.SPLIT)
+        )
+
+        cfg = config.clone()
+        cfg.defrost()
+        cfg.CONTENT_SCENES = []
+        dataset = VLNDatasetV1(cfg)
+        return VLNDatasetV1._get_scenes_from_dataset(dataset)
+
+    @staticmethod
+    def _get_scenes_from_dataset(dataset):
+        scenes = []
+
+        for episode in dataset.episodes:
+            scene = episode.scene_id.rsplit("/", 1)[-1].replace(".glb", "")
+            if scene not in scenes:
+                scenes.append(scene)
+        return scenes
+
     def __init__(self, config: Optional[Config] = None) -> None:
         self.episodes = []
 
