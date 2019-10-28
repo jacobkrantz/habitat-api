@@ -1,8 +1,8 @@
 BASE_TASK_CONFIG_PATH: "configs/tasks/vln_r2r.yaml"
 TRAINER_NAME: "ppo_vln"
 ENV_NAME: "VLNRLEnv"
-SIMULATOR_GPU_ID: 0
-TORCH_GPU_ID: 0
+SIMULATOR_GPU_ID: 1
+TORCH_GPU_ID: 1
 VIDEO_OPTION: ["disk", "tensorboard"]
 TENSORBOARD_DIR: "tb"
 VIDEO_DIR: "video_dir"

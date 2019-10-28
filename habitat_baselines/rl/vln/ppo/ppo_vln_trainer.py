@@ -55,13 +55,11 @@ class PPOVLN_Trainer(BaseRLTrainer):
         """
         logger.add_filehandler(self.config.LOG_FILE)
 
-        print(self.envs.observation_spaces[0])
-        quit()
         self.actor_critic = VLNBaselinePolicy(
             observation_space=self.envs.observation_spaces[0],
             action_space=self.envs.action_spaces[0],
             hidden_size=ppo_cfg.hidden_size,
-            goal_sensor_uuid=self.config.TASK_CONFIG.TASK.GOAL_SENSOR_UUID,
+            instruction_sensor_uuid=self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
         )
         self.actor_critic.to(self.device)
 

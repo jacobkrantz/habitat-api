@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 
 from habitat_baselines.common.utils import CategoricalNet, Flatten
+from habitat_baselines.rl.models.instruction_sensor import InstructionEncoder
 from habitat_baselines.rl.models.rnn_state_encoder import RNNStateEncoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN
 from habitat_baselines.rl.ppo.policy import Net, Policy
@@ -20,14 +21,14 @@ class VLNBaselinePolicy(Policy):
         self,
         observation_space,
         action_space,
-        goal_sensor_uuid,
+        instruction_sensor_uuid,
         hidden_size=512,
     ):
         super().__init__(
             VLNBaselineNet(
                 observation_space=observation_space,
                 hidden_size=hidden_size,
-                goal_sensor_uuid=goal_sensor_uuid,
+                instruction_sensor_uuid=instruction_sensor_uuid,
             ),
             action_space.n,
         )
@@ -38,18 +39,25 @@ class VLNBaselineNet(Net):
     goal vector with CNN's output and passes that through RNN.
     """
 
-    def __init__(self, observation_space, hidden_size, goal_sensor_uuid):
+    def __init__(
+        self, observation_space, hidden_size, instruction_sensor_uuid
+    ):
         super().__init__()
-        self.goal_sensor_uuid = goal_sensor_uuid
-        self._n_input_goal = observation_space.spaces[
-            self.goal_sensor_uuid
-        ].shape[0]
+
+        self.instruction_sensor_uuid = instruction_sensor_uuid
+        self._instruction_embedding_size = hidden_size
         self._hidden_size = hidden_size
+
+        self.instruction_encoder = InstructionEncoder(
+            self._hidden_size + self._instruction_embedding_size,
+            self._hidden_size,
+        )
 
         self.visual_encoder = SimpleCNN(observation_space, hidden_size)
 
         self.state_encoder = RNNStateEncoder(
-            (0 if self.is_blind else self._hidden_size) + self._n_input_goal,
+            (0 if self.is_blind else self._hidden_size)
+            + self._instruction_embedding_size,
             self._hidden_size,
         )
 
@@ -67,12 +75,9 @@ class VLNBaselineNet(Net):
     def num_recurrent_layers(self):
         return self.state_encoder.num_recurrent_layers
 
-    def get_target_encoding(self, observations):
-        return observations[self.goal_sensor_uuid]
-
     def forward(self, observations, rnn_hidden_states, prev_actions, masks):
-        target_encoding = self.get_target_encoding(observations)
-        x = [target_encoding]
+        instruction_embed = self.instruction_encoder(observations)
+        x = [instruction_embed]
 
         if not self.is_blind:
             perception_embed = self.visual_encoder(observations)
