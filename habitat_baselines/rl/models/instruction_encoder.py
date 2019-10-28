@@ -30,6 +30,7 @@ class InstructionEncoder(nn.Module):
         self.embedding_layer = nn.Embedding(
             num_embeddings=vocab_size, embedding_dim=embedding_size
         )
+
         self.encoder_rnn = RNNStateEncoder(
             input_size=embedding_size,
             hidden_size=hidden_size,
@@ -38,7 +39,7 @@ class InstructionEncoder(nn.Module):
         )
 
     def forward(self, observations):
-        instruction = observations["instuction"]
+        instruction = observations["instruction"]  # Size: [Batch, length]
         embedded = self.embedding_layer(instruction)
         # for word in embedded:
         #   if word is PAD: # (0)

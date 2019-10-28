@@ -203,12 +203,9 @@ class PPOVLN_Trainer(BaseRLTrainer):
         Returns:
             None
         """
-
         self.envs = construct_envs(
             self.config, get_env_class(self.config.ENV_NAME)
         )
-        # TODO: specify instruction sensor observation space as length of 200
-        print(self.envs.observation_spaces[0])
 
         ppo_cfg = self.config.RL.PPO
         self.device = (
@@ -216,6 +213,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
             if torch.cuda.is_available()
             else torch.device("cpu")
         )
+
         if not os.path.isdir(self.config.CHECKPOINT_FOLDER):
             os.makedirs(self.config.CHECKPOINT_FOLDER)
         self._setup_actor_critic_agent(ppo_cfg)

@@ -51,7 +51,7 @@ class VLNBaselineNet(Net):
         super().__init__()
 
         self.instruction_sensor_uuid = instruction_sensor_uuid
-        self._instruction_embedding_size = hidden_size
+        self._instruction_embedding_size = 200  # HACK
         self._hidden_size = hidden_size
 
         self.instruction_encoder = InstructionEncoder(

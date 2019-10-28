@@ -7,6 +7,7 @@
 from typing import Any, Dict, List, Optional
 
 import attr
+import numpy as np
 from gym import spaces
 
 from habitat.core.registry import registry
@@ -56,7 +57,10 @@ class VLNEpisode(NavigationEpisode):
 class InstructionSensor(Sensor):
     def __init__(self, **kwargs):
         self.uuid = "instruction"
-        self.observation_space = spaces.Discrete(0)
+        # HACK: for when using just tokens and 200 padding
+        self.observation_space = spaces.Box(
+            low=0, high=5000, shape=(200,), dtype=np.float32
+        )
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return self.uuid
