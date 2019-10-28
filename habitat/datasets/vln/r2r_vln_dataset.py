@@ -105,6 +105,13 @@ class VLNDatasetV1(Dataset):
                 episode.scene_id = os.path.join(scenes_dir, episode.scene_id)
 
             episode.instruction = InstructionData(**episode.instruction)
+            # HACK: the longest instruction_tokens in training is 153. Pad all
+            #   instruction_tokens to 200.
+            while len(episode.instruction.instruction_tokens) < 200:
+                episode.instruction.instruction_tokens.append(
+                    self.instruction_vocab.PAD_INDEX
+                )
+
             for g_index, goal in enumerate(episode.goals):
                 episode.goals[g_index] = NavigationGoal(**goal)
             self.episodes.append(episode)

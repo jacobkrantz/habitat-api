@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 
 from habitat_baselines.common.utils import CategoricalNet, Flatten
-from habitat_baselines.rl.models.instruction_sensor import InstructionEncoder
+from habitat_baselines.rl.models.instruction_encoder import InstructionEncoder
 from habitat_baselines.rl.models.rnn_state_encoder import RNNStateEncoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN
 from habitat_baselines.rl.ppo.policy import Net, Policy
@@ -22,11 +22,13 @@ class VLNBaselinePolicy(Policy):
         observation_space,
         action_space,
         instruction_sensor_uuid,
+        vocab_size,
         hidden_size=512,
     ):
         super().__init__(
             VLNBaselineNet(
                 observation_space=observation_space,
+                vocab_size=vocab_size,
                 hidden_size=hidden_size,
                 instruction_sensor_uuid=instruction_sensor_uuid,
             ),
@@ -40,7 +42,11 @@ class VLNBaselineNet(Net):
     """
 
     def __init__(
-        self, observation_space, hidden_size, instruction_sensor_uuid
+        self,
+        observation_space,
+        vocab_size,
+        hidden_size,
+        instruction_sensor_uuid,
     ):
         super().__init__()
 
@@ -49,8 +55,9 @@ class VLNBaselineNet(Net):
         self._hidden_size = hidden_size
 
         self.instruction_encoder = InstructionEncoder(
-            self._hidden_size + self._instruction_embedding_size,
-            self._hidden_size,
+            vocab_size=vocab_size,
+            embedding_size=self._instruction_embedding_size,
+            hidden_size=self._hidden_size,
         )
 
         self.visual_encoder = SimpleCNN(observation_space, hidden_size)

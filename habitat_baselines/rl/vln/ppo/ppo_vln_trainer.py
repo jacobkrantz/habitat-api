@@ -28,6 +28,7 @@ from habitat_baselines.common.utils import (
 )
 from habitat_baselines.rl.ppo import PPO
 from habitat_baselines.rl.vln.ppo import VLNBaselinePolicy
+from habitat_baselines.rl.vln.ppo.utils import transform_observations
 
 
 @baseline_registry.register_trainer(name="ppo_vln")
@@ -59,6 +60,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
             observation_space=self.envs.observation_spaces[0],
             action_space=self.envs.action_spaces[0],
             hidden_size=ppo_cfg.hidden_size,
+            vocab_size=5,
             instruction_sensor_uuid=self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
         )
         self.actor_critic.to(self.device)
@@ -205,6 +207,8 @@ class PPOVLN_Trainer(BaseRLTrainer):
         self.envs = construct_envs(
             self.config, get_env_class(self.config.ENV_NAME)
         )
+        # TODO: specify instruction sensor observation space as length of 200
+        print(self.envs.observation_spaces[0])
 
         ppo_cfg = self.config.RL.PPO
         self.device = (
@@ -231,6 +235,9 @@ class PPOVLN_Trainer(BaseRLTrainer):
         rollouts.to(self.device)
 
         observations = self.envs.reset()
+        observations = transform_observations(
+            observations, self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID
+        )
         batch = batch_obs(observations)
 
         for sensor in rollouts.observations:
@@ -519,24 +526,24 @@ class PPOVLN_Trainer(BaseRLTrainer):
                     frame = observations_to_image(observations[i], infos[i])
                     rgb_frames[i].append(frame)
 
-        (
-            self.envs,
-            test_recurrent_hidden_states,
-            not_done_masks,
-            current_episode_reward,
-            prev_actions,
-            batch,
-            rgb_frames,
-        ) = self._pause_envs(
-            envs_to_pause,
-            self.envs,
-            test_recurrent_hidden_states,
-            not_done_masks,
-            current_episode_reward,
-            prev_actions,
-            batch,
-            rgb_frames,
-        )
+            (
+                self.envs,
+                test_recurrent_hidden_states,
+                not_done_masks,
+                current_episode_reward,
+                prev_actions,
+                batch,
+                rgb_frames,
+            ) = self._pause_envs(
+                envs_to_pause,
+                self.envs,
+                test_recurrent_hidden_states,
+                not_done_masks,
+                current_episode_reward,
+                prev_actions,
+                batch,
+                rgb_frames,
+            )
 
         aggregated_stats = dict()
         for stat_key in next(iter(stats_episodes.values())).keys():
