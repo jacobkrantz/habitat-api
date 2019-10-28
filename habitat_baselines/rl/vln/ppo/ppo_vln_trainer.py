@@ -35,7 +35,6 @@ class PPOVLN_Trainer(BaseRLTrainer):
     r"""Trainer class for PPO algorithm
     Paper: https://arxiv.org/abs/1707.06347.
     """
-    # supported_tasks = ["Nav-v0"]
 
     def __init__(self, config=None):
         super().__init__(config)
@@ -56,6 +55,8 @@ class PPOVLN_Trainer(BaseRLTrainer):
         """
         logger.add_filehandler(self.config.LOG_FILE)
 
+        print(self.envs.observation_spaces[0])
+        quit()
         self.actor_critic = VLNBaselinePolicy(
             observation_space=self.envs.observation_spaces[0],
             action_space=self.envs.action_spaces[0],
@@ -375,21 +376,21 @@ class PPOVLN_Trainer(BaseRLTrainer):
         ckpt_dict = self.load_checkpoint(checkpoint_path, map_location="cpu")
 
         if self.config.EVAL.USE_CKPT_CONFIG:
-            config = self._setup_eval_config(ckpt_dict["config"])
+            self.config = self._setup_eval_config(ckpt_dict["config"])
         else:
-            config = self.config.clone()
+            self.config = self.config.clone()
 
         ppo_cfg = config.RL.PPO
 
-        config.defrost()
-        config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
-        config.freeze()
+        self.config.defrost()
+        self.config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
+        self.config.freeze()
 
         if len(self.config.VIDEO_OPTION) > 0:
-            config.defrost()
-            config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
-            config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
-            config.freeze()
+            self.config.defrost()
+            self.config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
+            self.config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
+            self.config.freeze()
 
         logger.info(f"env config: {config}")
         self.envs = construct_envs(
