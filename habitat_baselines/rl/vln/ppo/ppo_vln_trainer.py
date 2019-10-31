@@ -45,11 +45,11 @@ class PPOVLN_Trainer(BaseRLTrainer):
         if config is not None:
             logger.info(f"config: {config}")
 
-    def _setup_actor_critic_agent(self, ppo_cfg: Config) -> None:
+    def _setup_actor_critic_agent(self, rl_cfg: Config) -> None:
         r"""Sets up actor critic and agent for PPO.
 
         Args:
-            ppo_cfg: config node with relevant params
+            rl_cfg: config node with relevant params
 
         Returns:
             None
@@ -59,12 +59,11 @@ class PPOVLN_Trainer(BaseRLTrainer):
         self.actor_critic = VLNBaselinePolicy(
             observation_space=self.envs.observation_spaces[0],
             action_space=self.envs.action_spaces[0],
-            hidden_size=ppo_cfg.hidden_size,
-            vocab_size=5,
-            instruction_sensor_uuid=self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
+            vln_config=rl_cfg.VLN,
         )
         self.actor_critic.to(self.device)
 
+        ppo_cfg = rl_cfg.PPO
         self.agent = PPO(
             actor_critic=self.actor_critic,
             clip_param=ppo_cfg.clip_param,
@@ -138,6 +137,9 @@ class PPOVLN_Trainer(BaseRLTrainer):
 
         outputs = self.envs.step([a[0].item() for a in actions])
         observations, rewards, dones, infos = [list(x) for x in zip(*outputs)]
+        observations = transform_observations(
+            observations, self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID
+        )
 
         env_time += time.time() - t_step_env
 
@@ -207,7 +209,9 @@ class PPOVLN_Trainer(BaseRLTrainer):
             self.config, get_env_class(self.config.ENV_NAME)
         )
 
-        ppo_cfg = self.config.RL.PPO
+        rl_config = self.config.RL
+        ppo_cfg = rl_config.PPO
+
         self.device = (
             torch.device("cuda", self.config.TORCH_GPU_ID)
             if torch.cuda.is_available()
@@ -216,7 +220,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
 
         if not os.path.isdir(self.config.CHECKPOINT_FOLDER):
             os.makedirs(self.config.CHECKPOINT_FOLDER)
-        self._setup_actor_critic_agent(ppo_cfg)
+        self._setup_actor_critic_agent(rl_config)
         logger.info(
             "agent number of parameters: {}".format(
                 sum(param.numel() for param in self.agent.parameters())
@@ -383,8 +387,6 @@ class PPOVLN_Trainer(BaseRLTrainer):
         else:
             self.config = self.config.clone()
 
-        ppo_cfg = config.RL.PPO
-
         self.config.defrost()
         self.config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
         self.config.freeze()
@@ -399,7 +401,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
         self.envs = construct_envs(
             self.config, get_env_class(self.config.ENV_NAME)
         )
-        self._setup_actor_critic_agent(ppo_cfg)
+        self._setup_actor_critic_agent(self.config.RL)
 
         self.agent.load_state_dict(ckpt_dict["state_dict"])
         self.actor_critic = self.agent.actor_critic
@@ -416,6 +418,9 @@ class PPOVLN_Trainer(BaseRLTrainer):
         )._get_uuid()
 
         observations = self.envs.reset()
+        observations = transform_observations(
+            observations, self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID
+        )
         batch = batch_obs(observations, self.device)
 
         current_episode_reward = torch.zeros(
@@ -464,6 +469,10 @@ class PPOVLN_Trainer(BaseRLTrainer):
             observations, rewards, dones, infos = [
                 list(x) for x in zip(*outputs)
             ]
+            observations = transform_observations(
+                observations,
+                self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
+            )
             batch = batch_obs(observations, self.device)
 
             not_done_masks = torch.tensor(

@@ -87,3 +87,12 @@ data
 
 # vim
 *.swp
+
+# venv virtual environment
+venv
+
+# TensorBoard
+tb
+
+# Generated videos
+video_dir
