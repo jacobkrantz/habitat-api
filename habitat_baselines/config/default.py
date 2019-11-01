@@ -75,6 +75,12 @@ _C.RL.PPO.reward_window_size = 50
 _C.RL.VLN = CN()
 _C.RL.VLN.INSTRUCTION_ENCODER = CN()
 _C.RL.VLN.INSTRUCTION_ENCODER.vocab_size = 5000  # HACK
+_C.RL.VLN.INSTRUCTION_ENCODER.use_pretrained_embeddings = False
+_C.RL.VLN.INSTRUCTION_ENCODER.embedding_file = "data/glove/glove.42B.300d.txt"
+_C.RL.VLN.INSTRUCTION_ENCODER.dataset_vocab = (
+    "data/datasets/vln/r2r/v1/train/train.json.gz"
+)
+_C.RL.VLN.INSTRUCTION_ENCODER.fine_tune_embeddings = False
 _C.RL.VLN.INSTRUCTION_ENCODER.embedding_size = 200
 _C.RL.VLN.INSTRUCTION_ENCODER.hidden_size = 512
 _C.RL.VLN.INSTRUCTION_ENCODER.rnn_type = "LSTM"
@@ -82,7 +88,7 @@ _C.RL.VLN.VISUAL_ENCODER = CN()
 _C.RL.VLN.VISUAL_ENCODER.hidden_size = 512
 _C.RL.VLN.STATE_ENCODER = CN()
 _C.RL.VLN.STATE_ENCODER.hidden_size = 512
-_C.RL.VLN.STATE_ENCODER.rnn_type = "LSTM"
+_C.RL.VLN.STATE_ENCODER.rnn_type = "GRU"
 # -----------------------------------------------------------------------------
 # ORBSLAM2 BASELINE
 # -----------------------------------------------------------------------------

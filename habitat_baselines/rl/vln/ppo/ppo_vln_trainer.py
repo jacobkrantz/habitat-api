@@ -281,7 +281,11 @@ class PPOVLN_Trainer(BaseRLTrainer):
                     )
 
                 for step in range(ppo_cfg.num_steps):
-                    delta_pth_time, delta_env_time, delta_steps = self._collect_rollout_step(
+                    (
+                        delta_pth_time,
+                        delta_env_time,
+                        delta_steps,
+                    ) = self._collect_rollout_step(
                         rollouts,
                         current_episode_reward,
                         episode_rewards,
@@ -291,9 +295,12 @@ class PPOVLN_Trainer(BaseRLTrainer):
                     env_time += delta_env_time
                     count_steps += delta_steps
 
-                delta_pth_time, value_loss, action_loss, dist_entropy = self._update_agent(
-                    ppo_cfg, rollouts
-                )
+                (
+                    delta_pth_time,
+                    value_loss,
+                    action_loss,
+                    dist_entropy,
+                ) = self._update_agent(ppo_cfg, rollouts)
                 pth_time += delta_pth_time
 
                 window_episode_reward.append(episode_rewards.clone())
@@ -454,7 +461,12 @@ class PPOVLN_Trainer(BaseRLTrainer):
             current_episodes = self.envs.current_episodes()
 
             with torch.no_grad():
-                _, actions, _, test_recurrent_hidden_states = self.actor_critic.act(
+                (
+                    _,
+                    actions,
+                    _,
+                    test_recurrent_hidden_states,
+                ) = self.actor_critic.act(
                     batch,
                     test_recurrent_hidden_states,
                     prev_actions,
