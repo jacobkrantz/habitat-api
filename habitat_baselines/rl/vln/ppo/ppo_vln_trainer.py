@@ -14,7 +14,10 @@ import torch
 from torch.optim.lr_scheduler import LambdaLR
 
 from habitat import Config, logger
-from habitat.utils.visualizations.utils import observations_to_image
+from habitat.utils.visualizations.utils import (
+    append_text_to_image,
+    observations_to_image,
+)
 from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.env_utils import construct_envs
@@ -395,7 +398,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
             self.config = self.config.clone()
 
         self.config.defrost()
-        self.config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
+        self.config.TASK_CONFIG.DATASET.SPLIT = self.config.EVAL.SPLIT
         self.config.freeze()
 
         if len(self.config.VIDEO_OPTION) > 0:
@@ -404,7 +407,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
             self.config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
             self.config.freeze()
 
-        logger.info(f"env config: {config}")
+        logger.info(f"env config: {self.config}")
         self.envs = construct_envs(
             self.config, get_env_class(self.config.ENV_NAME)
         )
@@ -437,7 +440,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
         test_recurrent_hidden_states = torch.zeros(
             self.actor_critic.net.num_recurrent_layers,
             self.config.NUM_PROCESSES,
-            ppo_cfg.hidden_size,
+            self.config.RL.VLN.STATE_ENCODER.hidden_size,
             device=self.device,
         )
         prev_actions = torch.zeros(
@@ -473,7 +476,6 @@ class PPOVLN_Trainer(BaseRLTrainer):
                     not_done_masks,
                     deterministic=False,
                 )
-
                 prev_actions.copy_(actions)
 
             outputs = self.envs.step([a[0].item() for a in actions])
@@ -543,6 +545,9 @@ class PPOVLN_Trainer(BaseRLTrainer):
                 # episode continues
                 elif len(self.config.VIDEO_OPTION) > 0:
                     frame = observations_to_image(observations[i], infos[i])
+                    frame = append_text_to_image(
+                        frame, current_episodes[i].instruction.instruction_text
+                    )
                     rgb_frames[i].append(frame)
 
             (
