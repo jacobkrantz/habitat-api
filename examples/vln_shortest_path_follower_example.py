@@ -6,90 +6,25 @@
 
 import os
 import shutil
-import textwrap
 
 import numpy as np
 
 import habitat
+from examples.shortest_path_follower_example import (
+    SimpleRLEnv,
+    draw_top_down_map,
+)
 from habitat.core.utils import try_cv2_import
 from habitat.tasks.nav.shortest_path_follower import ShortestPathFollower
 from habitat.utils.visualizations import maps
-from habitat.utils.visualizations.utils import images_to_video
-
-cv2 = try_cv2_import()
+from habitat.utils.visualizations.utils import (
+    append_text_to_image,
+    images_to_video,
+)
 
 IMAGE_DIR = os.path.join("examples", "images")
 if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
-
-
-class SimpleRLEnv(habitat.RLEnv):
-    def get_reward_range(self):
-        return [-1, 1]
-
-    def get_reward(self, observations):
-        return 0
-
-    def get_done(self, observations):
-        return self.habitat_env.episode_over
-
-    def get_info(self, observations):
-        return self.habitat_env.get_metrics()
-
-
-def draw_top_down_map(info, heading, output_size):
-    top_down_map = maps.colorize_topdown_map(
-        info["top_down_map"]["map"], info["top_down_map"]["fog_of_war_mask"]
-    )
-    original_map_size = top_down_map.shape[:2]
-    map_scale = np.array(
-        (1, original_map_size[1] * 1.0 / original_map_size[0])
-    )
-    new_map_size = np.round(output_size * map_scale).astype(np.int32)
-    # OpenCV expects w, h but map size is in h, w
-    top_down_map = cv2.resize(top_down_map, (new_map_size[1], new_map_size[0]))
-
-    map_agent_pos = info["top_down_map"]["agent_map_coord"]
-    map_agent_pos = np.round(
-        map_agent_pos * new_map_size / original_map_size
-    ).astype(np.int32)
-    top_down_map = maps.draw_agent(
-        top_down_map,
-        map_agent_pos,
-        heading - np.pi / 2,
-        agent_radius_px=top_down_map.shape[0] / 40,
-    )
-    return top_down_map
-
-
-def append_text_to_image(orig_img, text):
-    h, w, c = orig_img.shape
-    font_size = 0.5
-    font_thickness = 1
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    blank_image = np.zeros(orig_img.shape, dtype=np.uint8)
-
-    char_size = cv2.getTextSize(" ", font, font_size, font_thickness)[0]
-    wrapped_text = textwrap.wrap(text, width=int(w / char_size[0]))
-
-    y = 0
-    for line in wrapped_text:
-        textsize = cv2.getTextSize(line, font, font_size, font_thickness)[0]
-        y += textsize[1] + 10
-        x = 10
-        cv2.putText(
-            blank_image,
-            line,
-            (x, y),
-            font,
-            font_size,
-            (255, 255, 255),
-            font_thickness,
-            lineType=cv2.LINE_AA,
-        )
-    text_image = blank_image[0 : y + 10, 0:w]
-    final = np.concatenate((orig_img, text_image), axis=0)
-    return final
 
 
 def save_map(observations, info, images):
@@ -98,7 +33,6 @@ def save_map(observations, info, images):
         info, observations["heading"], im.shape[0]
     )
     output_im = np.concatenate((im, top_down_map), axis=1)
-    cv2.imwrite("title.jpg", output_im)
     observations["instruction"]["text"]
     output_im = append_text_to_image(
         output_im, observations["instruction"]["text"]

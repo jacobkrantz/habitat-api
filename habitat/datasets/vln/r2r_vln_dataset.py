@@ -17,12 +17,9 @@ from habitat.datasets.utils import VocabDict
 from habitat.tasks.nav.nav import NavigationGoal, ShortestPathPoint
 from habitat.tasks.vln.vln import InstructionData, VLNEpisode
 
-CONTENT_SCENES_PATH_FIELD = "content_scenes_path"
 DEFAULT_SCENE_PATH_PREFIX = "data/scene_datasets/mp3d/"
 
-R2R_TRAIN_EPISODES = 10837
 R2R_VAL_SEEN_EPISODES = 781
-R2R_VAL_UNSEEN_EPISODES = 1839
 
 
 @registry.register_dataset(name="R2RVLN-v1")
@@ -80,19 +77,10 @@ class VLNDatasetV1(Dataset):
     ) -> None:
 
         deserialized = json.loads(json_str)
+        self.instruction_vocab = VocabDict(
+            word_list=deserialized["instruction_vocab"]["word_list"]
+        )
 
-        # Done for the serialization test
-        if "word_list" in deserialized["instruction_vocab"]:
-            self.instruction_vocab = VocabDict(
-                word_list=deserialized["instruction_vocab"]["word_list"]
-            )
-        else:
-            self.instruction_vocab = VocabDict(
-                word_list=deserialized["instruction_vocab"]
-            )
-
-        if CONTENT_SCENES_PATH_FIELD in deserialized:
-            self.content_scenes_path = deserialized[CONTENT_SCENES_PATH_FIELD]
         for episode in deserialized["episodes"]:
             episode = VLNEpisode(**episode)
 

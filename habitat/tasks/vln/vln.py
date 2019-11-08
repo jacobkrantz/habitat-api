@@ -28,18 +28,22 @@ class InstructionData:
 
 @attr.s(auto_attribs=True, kw_only=True)
 class VLNEpisode(NavigationEpisode):
-    r"""Specification of episode that includes initial position and rotation of
-    agent, goal specifications, instruction specifications, and optional shortest paths.
+    r"""Specification of episode that includes initial position and rotation
+    of agent, goal specifications, instruction specifications, and optional
+    shortest paths.
 
     Args:
+        episode_id: id of episode in the dataset
         scene_id: id of scene inside the simulator.
         start_position: numpy ndarray containing 3 entries for (x, y, z).
         start_rotation: numpy ndarray with 4 entries for (x, y, z, w)
             elements of unit quaternion (versor) representing agent 3D
             orientation.
-        instruction: single instruction guide to goal.
+        goals: list of goals specifications
+        path: List of (x, y, z) positions which gives the shortest
+            path to the goal that aligns with the instruction.
+        instruction: single natural language instruction guide to goal.
         trajectory_id: id of ground truth trajectory path.
-        goals: relevant goal object/room.
     """
     path: List[List[float]] = attr.ib(
         default=None, validator=not_none_validator
@@ -48,9 +52,6 @@ class VLNEpisode(NavigationEpisode):
         default=None, validator=not_none_validator
     )
     trajectory_id: int = attr.ib(default=None, validator=not_none_validator)
-    goals: List[NavigationGoal] = attr.ib(
-        default=None, validator=not_none_validator
-    )
 
 
 @registry.register_sensor(name="InstructionSensor")
@@ -83,5 +84,13 @@ class InstructionSensor(Sensor):
 
 @registry.register_task(name="VLN-v0")
 class VLNTask(NavigationTask):
+    r"""Vision and Language Navigation Task
+    Goal: An agent must navigate to a goal location in a 3D environment
+        specified by a natural language instruction.
+    Metric: Success weighted by Path Length (SPL)
+    Usage example:
+        examples/vln_shortest_path_follower.py
+    """
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)

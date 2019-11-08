@@ -172,7 +172,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
 
         pth_time += time.time() - t_update_stats
 
-        return pth_time, env_time, self.envs.num_envs
+        return pth_time, env_time, self.envs.num_envs, infos
 
     def _update_agent(self, ppo_cfg, rollouts):
         t_update_model = time.time()
@@ -259,6 +259,11 @@ class PPOVLN_Trainer(BaseRLTrainer):
         current_episode_reward = torch.zeros(self.envs.num_envs, 1)
         window_episode_reward = deque(maxlen=ppo_cfg.reward_window_size)
         window_episode_counts = deque(maxlen=ppo_cfg.reward_window_size)
+        if "DISTANCE_TO_GOAL" in self.config.TASK_CONFIG.TASK.MEASUREMENTS:
+            window_episode_ratio = deque(maxlen=ppo_cfg.reward_window_size)
+            window_episode_distance = deque(maxlen=ppo_cfg.reward_window_size)
+        if "SPL" in self.config.TASK_CONFIG.TASK.MEASUREMENTS:
+            window_episode_spl = deque(maxlen=ppo_cfg.reward_window_size)
 
         t_start = time.time()
         env_time = 0
@@ -288,6 +293,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
                         delta_pth_time,
                         delta_env_time,
                         delta_steps,
+                        infos,
                     ) = self._collect_rollout_step(
                         rollouts,
                         current_episode_reward,
@@ -308,6 +314,19 @@ class PPOVLN_Trainer(BaseRLTrainer):
 
                 window_episode_reward.append(episode_rewards.clone())
                 window_episode_counts.append(episode_counts.clone())
+                for i in infos:
+                    if (
+                        "DISTANCE_TO_GOAL"
+                        in self.config.TASK_CONFIG.TASK.MEASUREMENTS
+                    ):
+                        window_episode_ratio.append(
+                            i["distance_to_goal"]["distance_ratio"]
+                        )
+                        window_episode_distance.append(
+                            i["distance_to_goal"]["distance_to_target"]
+                        )
+                    if "SPL" in self.config.TASK_CONFIG.TASK.MEASUREMENTS:
+                        window_episode_spl.append(i["spl"])
 
                 losses = [value_loss, action_loss]
                 stats = zip(
@@ -327,6 +346,26 @@ class PPOVLN_Trainer(BaseRLTrainer):
                 writer.add_scalar(
                     "reward", deltas["reward"] / deltas["count"], count_steps
                 )
+
+                if (
+                    "DISTANCE_TO_GOAL"
+                    in self.config.TASK_CONFIG.TASK.MEASUREMENTS
+                ):
+                    writer.add_scalar(
+                        "start_distance_to_end_distance_ratio",
+                        np.mean(window_episode_ratio),
+                        count_steps,
+                    )
+                    writer.add_scalar(
+                        "distance_to_target",
+                        np.mean(window_episode_distance),
+                        count_steps,
+                    )
+
+                if "SPL" in self.config.TASK_CONFIG.TASK.MEASUREMENTS:
+                    writer.add_scalar(
+                        "SPL", np.mean(window_episode_spl), count_steps
+                    )
 
                 writer.add_scalars(
                     "losses",
@@ -363,6 +402,29 @@ class PPOVLN_Trainer(BaseRLTrainer):
                                 (window_rewards / window_counts).item(),
                             )
                         )
+                        if "SPL" in self.config.TASK_CONFIG.TASK.MEASUREMENTS:
+                            logger.info(
+                                "Average window size {} SPL: {:3f}".format(
+                                    len(window_episode_spl),
+                                    np.mean(window_episode_spl),
+                                )
+                            )
+                        if (
+                            "DISTANCE_TO_GOAL"
+                            in self.config.TASK_CONFIG.TASK.MEASUREMENTS
+                        ):
+                            logger.info(
+                                "Average window size {} distance ratio: {:3f}".format(
+                                    len(window_episode_ratio),
+                                    np.mean(window_episode_ratio),
+                                )
+                            )
+                            logger.info(
+                                "Average window size {} distance to target: {:3f}".format(
+                                    len(window_episode_distance),
+                                    np.mean(window_episode_distance),
+                                )
+                            )
                     else:
                         logger.info("No episodes finish in current window")
 

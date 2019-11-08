@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 # Copyright (c) Facebook, Inc. and its affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
@@ -43,15 +42,15 @@ def check_json_serializaiton(dataset: habitat.Dataset):
 
 
 def test_r2r_vln_dataset():
-    dataset_config = get_config(CFG_TEST).DATASET
+    vln_config = get_config(CFG_TEST)
     if not r2r_vln_dataset.VLNDatasetV1.check_config_paths_exist(
-        dataset_config
+        vln_config.DATASET
     ):
-        pytest.skip(
-            "Please download Matterport3D R2R dataset to " "data folder."
-        )
+        pytest.skip("Please download Matterport3D R2R dataset to data folder.")
 
-    dataset = r2r_vln_dataset.VLNDatasetV1(config=dataset_config)
+    dataset = make_dataset(
+        id_dataset=vln_config.DATASET.TYPE, config=vln_config.DATASET
+    )
     assert dataset
     assert (
         len(dataset.episodes) == r2r_vln_dataset.R2R_VAL_SEEN_EPISODES
@@ -66,7 +65,7 @@ def test_r2r_vln_sim():
         vln_config.DATASET
     ):
         pytest.skip(
-            "Please download Matterport3D R2R VLN dataset to " "data folder."
+            "Please download Matterport3D R2R VLN dataset to data folder."
         )
 
     dataset = make_dataset(
@@ -79,7 +78,6 @@ def test_r2r_vln_sim():
     follower = ShortestPathFollower(
         env.habitat_env.sim, goal_radius=0.5, return_one_hot=False
     )
-
     assert env
 
     for i in range(len(env.episodes)):

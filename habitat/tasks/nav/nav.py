@@ -773,6 +773,8 @@ class DistanceToGoal(Measure):
             "distance_delta": self._start_end_episode_distance
             - distance_to_target,
             "agent_path_length": self._agent_episode_distance,
+            "distance_ratio": distance_to_target
+            / self._start_end_episode_distance,
         }
 
 
