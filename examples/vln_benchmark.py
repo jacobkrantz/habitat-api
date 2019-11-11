@@ -8,9 +8,12 @@ import argparse
 import sys
 from collections import defaultdict
 
+import numpy as np
+
 import habitat
-from habitat.config.default import get_config
+from examples.shortest_path_follower_example import SimpleRLEnv
 from habitat.core.benchmark import Benchmark
+from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.tasks.nav.shortest_path_follower import ShortestPathFollower
 from habitat_baselines.agents.simple_agents import (
     ForwardOnlyAgent,
@@ -39,33 +42,76 @@ ShortestPathAgent:
 """
 
 
-def shortest_path_benchmark(env, mode):
+def path_follower_benchmark(config, mode="geodesic_path", shortest=False):
+    r"""Benchmark for a path following agent.
+    Args:
+        config: Config
+        mode: either "geodesic_path" or "greedy"
+        shortest: if True, agent takes shortest path from start to goal. If
+            False, agent follows ground truth path from viewpoint to viewpoint
     """
-    Custom benchmark for the shortest path agent because it requires access
-    to habitat_env during each episode.
-    mode either 'geodesic_path' or 'greedy'
-    """
-    goal_radius = env.episodes[0].goals[0].radius
-
-    follower = ShortestPathFollower(env.sim, goal_radius, False)
+    env = SimpleRLEnv(config=config)
+    follower = ShortestPathFollower(
+        env.habitat_env.sim, goal_radius=0.5, return_one_hot=False
+    )
     follower.mode = mode
 
+    metrics = defaultdict(list)
     for episode in range(len(env.episodes)):
         env.reset()
+        episode_id = env.habitat_env.current_episode.episode_id
 
-        if not env.sim.is_navigable(env.current_episode.goals[0].position):
-            print("Goal is not navigable.")
-        while not env.episode_over:
-            best_action = follower.get_next_action(
-                env.current_episode.goals[0].position
-            )
-            observations = env.step(best_action)
+        steps = 0
+        if shortest:
+            path = [env.habitat_env.current_episode.goals[0].position]
+        else:
+            path = env.habitat_env.current_episode.path + [
+                env.habitat_env.current_episode.goals[0].position
+            ]
+        for point in path:
+            done = False
+            while not done:
+                best_action = follower.get_next_action(point)
+                if best_action == None:
+                    break
+                env.step(best_action)
+                steps += 1
 
-    agg_metrics: Dict = defaultdict(float)
-    for m, v in env.get_metrics().items():
-        agg_metrics[m] += v
-    avg_metrics = {k: v / len(env.episodes) for k, v in agg_metrics.items()}
-    return avg_metrics
+        obs, reward, done, info = env.step(HabitatSimActions.STOP)
+        for k, v in info.items():
+            metrics[k].append(v)
+
+    agg_metrics = {}
+    for k, v in metrics.items():
+        agg_metrics[k] = np.mean(v)
+
+    env.close()
+    return agg_metrics
+
+
+def benchmark(agent, config):
+    r"""Benchmark function for habitat.Agent
+    """
+    env = SimpleRLEnv(config)
+    metrics = defaultdict(list)
+    for i in range(len(env.episodes)):
+        obs = env.reset()
+        agent.reset()
+        current_episode = env.current_episode
+        done = False
+        while not done:
+            action = agent.act(obs)
+            obs, reward, done, info = env.step(action)
+
+        for k, v in info.items():
+            metrics[k].append(v)
+
+    agg_metrics = {}
+    for k, v in metrics.items():
+        agg_metrics[k] = np.mean(v)
+
+    env.close()
+    return agg_metrics
 
 
 def main():
@@ -73,33 +119,36 @@ def main():
     parser.add_argument(
         "--task-config", type=str, default="configs/tasks/vln_r2r.yaml"
     )
-    parser.add_argument("--sp-mode", type=str, default="geodesic_path")
     args = parser.parse_args()
-    config_env = get_config(args.task_config)
-    benchmark = Benchmark(args.task_config)
+    config_env = habitat.get_config(args.task_config)
 
+    all_metrics = {}
     for agent_name in [
         "RandomAgent",
         "ForwardOnlyAgent",
         "RandomForwardAgent",
         "GoalFollower",
+        "PathFollower",
+        "ShortestPathFollower",
     ]:
-        agent = getattr(sys.modules[__name__], agent_name)
-        agent = agent(
-            config_env.TASK.SUCCESS_DISTANCE, config_env.TASK.GOAL_SENSOR_UUID
-        )
-        metrics = benchmark.evaluate(agent)
+        if agent_name == "PathFollower":
+            all_metrics[agent_name] = path_follower_benchmark(config_env)
+        elif agent_name == "ShortestPathFollower":
+            all_metrics[agent_name] = path_follower_benchmark(
+                config_env, shortest=True
+            )
+        else:
+            agent = getattr(sys.modules[__name__], agent_name)(
+                config_env.TASK.SUCCESS_DISTANCE,
+                config_env.TASK.GOAL_SENSOR_UUID,
+            )
+            all_metrics[agent_name] = benchmark(agent, config_env)
 
+    for agent_name, metrics in all_metrics.items():
         print(f"Benchmark for agent {agent_name}:")
         for k, v in metrics.items():
             print("{}: {:.3f}".format(k, v))
         print("")
-
-    sp_metrics = shortest_path_benchmark(benchmark._env, args.sp_mode)
-
-    print(f"Benchmark for agent ShortestPathAgent:")
-    for k, v in sp_metrics.items():
-        print("{}: {:.3f}".format(k, v))
 
 
 if __name__ == "__main__":

@@ -133,6 +133,39 @@ _C.TASK.TOP_DOWN_MAP.FOG_OF_WAR.FOV = 90
 _C.TASK.COLLISIONS = CN()
 _C.TASK.COLLISIONS.TYPE = "Collisions"
 # -----------------------------------------------------------------------------
+# PATH_LENGTH MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.PATH_LENGTH = CN()
+_C.TASK.PATH_LENGTH.TYPE = "PathLength"
+# -----------------------------------------------------------------------------
+# NAVIGATION_ERROR MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.NAVIGATION_ERROR = CN()
+_C.TASK.NAVIGATION_ERROR.TYPE = "NavigationError"
+# -----------------------------------------------------------------------------
+# ORACLE_NAVIGATION_ERROR MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.ORACLE_NAVIGATION_ERROR = CN()
+_C.TASK.ORACLE_NAVIGATION_ERROR.TYPE = "OracleNavigationError"
+# -----------------------------------------------------------------------------
+# SUCCESS MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.SUCCESS = CN()
+_C.TASK.SUCCESS.TYPE = "Success"
+_C.TASK.SUCCESS.SUCCESS_DISTANCE = 0.2
+# -----------------------------------------------------------------------------
+# ORACLE_SUCCESS MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.ORACLE_SUCCESS = CN()
+_C.TASK.ORACLE_SUCCESS.TYPE = "OracleSuccess"
+_C.TASK.ORACLE_SUCCESS.SUCCESS_DISTANCE = 0.2
+# -----------------------------------------------------------------------------
+# ORACLE_SPL MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.ORACLE_SPL = CN()
+_C.TASK.ORACLE_SPL.TYPE = "OSPL"
+_C.TASK.ORACLE_SPL.SUCCESS_DISTANCE = 0.2
+# -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # # EQA TASK
 # -----------------------------------------------------------------------------

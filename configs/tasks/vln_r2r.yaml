@@ -21,12 +21,25 @@ TASK:
   SENSORS: ['INSTRUCTION_SENSOR']
   INSTRUCTION_SENSOR_UUID: instruction
   POSSIBLE_ACTIONS: ['STOP', 'MOVE_FORWARD', 'TURN_LEFT', 'TURN_RIGHT']
-  MEASUREMENTS: ['SPL', 'DISTANCE_TO_GOAL']
+  MEASUREMENTS: [
+    'PATH_LENGTH',
+    'NAVIGATION_ERROR',
+    'ORACLE_NAVIGATION_ERROR',
+    'SUCCESS',
+    'ORACLE_SUCCESS',
+    'SPL',
+    'ORACLE_SPL'
+  ]
+  SUCCESS:
+    SUCCESS_DISTANCE: 3.0
+  ORACLE_SUCCESS:
+    SUCCESS_DISTANCE: 3.0
   SPL:
-    TYPE: SPL
+    SUCCESS_DISTANCE: 3.0
+  ORACLE_SPL:
     SUCCESS_DISTANCE: 3.0
 DATASET:
   TYPE: R2RVLN-v1
   SPLIT: train
-  DATA_PATH: "./data/datasets/vln/r2r/preprocessed/v1/{split}/{split}.json.gz"
+  DATA_PATH: "./data/datasets/vln/r2r/preprocessed/v1/small_train.json.gz"
   SCENES_DIR: "data/scene_datasets/"
