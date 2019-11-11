@@ -132,7 +132,7 @@ class VLNRLEnv(habitat.RLEnv):
         )
 
     def get_reward(self, observations):
-        reward = self._rl_config.SLACK_REWARD
+        reward = 0.0
 
         current_target_distance = self._distance_target()
         reward += self._previous_target_distance - current_target_distance

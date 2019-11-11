@@ -69,6 +69,7 @@ _C.RL.PPO.use_linear_clip_decay = False
 _C.RL.PPO.gamma = 0.99
 _C.RL.PPO.tau = 0.95
 _C.RL.PPO.reward_window_size = 50
+_C.RL.PPO.use_normalized_advantage = True
 # -----------------------------------------------------------------------------
 # VLN CONFIG
 # -----------------------------------------------------------------------------

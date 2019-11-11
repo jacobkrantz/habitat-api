@@ -77,6 +77,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
             lr=ppo_cfg.lr,
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
+            use_normalized_advantage=ppo_cfg.use_normalized_advantage,
         )
 
     def save_checkpoint(self, file_name: str) -> None:
@@ -172,7 +173,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
 
         pth_time += time.time() - t_update_stats
 
-        return pth_time, env_time, self.envs.num_envs, infos
+        return pth_time, env_time, self.envs.num_envs, infos, dones
 
     def _update_agent(self, ppo_cfg, rollouts):
         t_update_model = time.time()
@@ -288,12 +289,14 @@ class PPOVLN_Trainer(BaseRLTrainer):
                         update, self.config.NUM_UPDATES
                     )
 
+                infos_list = []
                 for step in range(ppo_cfg.num_steps):
                     (
                         delta_pth_time,
                         delta_env_time,
                         delta_steps,
                         infos,
+                        dones,
                     ) = self._collect_rollout_step(
                         rollouts,
                         current_episode_reward,
@@ -303,6 +306,9 @@ class PPOVLN_Trainer(BaseRLTrainer):
                     pth_time += delta_pth_time
                     env_time += delta_env_time
                     count_steps += delta_steps
+                    for done, info in zip(dones, infos):
+                        if done:
+                            infos_list.append(info)
 
                 (
                     delta_pth_time,
@@ -314,19 +320,20 @@ class PPOVLN_Trainer(BaseRLTrainer):
 
                 window_episode_reward.append(episode_rewards.clone())
                 window_episode_counts.append(episode_counts.clone())
-                for i in infos:
+
+                for info in infos_list:
                     if (
                         "DISTANCE_TO_GOAL"
                         in self.config.TASK_CONFIG.TASK.MEASUREMENTS
                     ):
                         window_episode_ratio.append(
-                            i["distance_to_goal"]["distance_ratio"]
+                            info["distance_to_goal"]["distance_ratio"]
                         )
                         window_episode_distance.append(
-                            i["distance_to_goal"]["distance_to_target"]
+                            info["distance_to_goal"]["distance_to_target"]
                         )
                     if "SPL" in self.config.TASK_CONFIG.TASK.MEASUREMENTS:
-                        window_episode_spl.append(i["spl"])
+                        window_episode_spl.append(info["spl"])
 
                 losses = [value_loss, action_loss]
                 stats = zip(

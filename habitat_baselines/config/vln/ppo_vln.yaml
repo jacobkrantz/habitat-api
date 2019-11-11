@@ -1,22 +1,22 @@
 BASE_TASK_CONFIG_PATH: "configs/tasks/vln_r2r.yaml"
 TRAINER_NAME: "ppo_vln"
 ENV_NAME: "VLNRLEnv"
-SIMULATOR_GPU_ID: 0
-TORCH_GPU_ID: 0
+SIMULATOR_GPU_ID: 1
+TORCH_GPU_ID: 1
 VIDEO_OPTION: ["disk", "tensorboard"]
-TENSORBOARD_DIR: "tb"
-VIDEO_DIR: "video_dir"
-TEST_EPISODE_COUNT: 2
-EVAL_CKPT_PATH_DIR: "data/vln/new_checkpoints"
-NUM_PROCESSES: 1
+TENSORBOARD_DIR: tensorboard_dirs/first_full/first_full_2
+VIDEO_DIR: "videos/first_full_2"
+TEST_EPISODE_COUNT: 10
+EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/first_full/first_full_2"
+NUM_PROCESSES: 2
 SENSORS: ["RGB_SENSOR", "DEPTH_SENSOR"]
-CHECKPOINT_FOLDER: "data/vln/new_checkpoints"
-NUM_UPDATES: 10000
-LOG_INTERVAL: 10
-CHECKPOINT_INTERVAL: 50
+CHECKPOINT_FOLDER: "data/checkpoints/vln/first_full/first_full_2"
+NUM_UPDATES: 5000000
+LOG_INTERVAL: 20  # 10
+CHECKPOINT_INTERVAL: 500  # 100
 EVAL:
   USE_CKPT_CONFIG: False
-  SPLIT: val_seen
+  SPLIT: train
 
 RL:
   PPO:
@@ -37,16 +37,19 @@ RL:
     use_linear_clip_decay: True
     use_linear_lr_decay: True
     reward_window_size: 50
+    use_normalized_advantage: False # True for pointnav, but can hurt settings
+                              # like ObjectNav or PointNav when no GPS+Compass
+                              # sensor is involved.
   VLN:
     # Vision and Language Navigation parameters
     INSTRUCTION_ENCODER:
-      vocab_size: 3000
+      vocab_size: 2505
       use_pretrained_embeddings: True
       embedding_file: "./data/datasets/vln/r2r/preprocessed/v1/embeddings.json"
       dataset_vocab: "./data/datasets/vln/r2r/preprocessed/v1/train/train.json.gz"
       fine_tune_embeddings: False
       embedding_size: 50
-      hidden_size: 512
+      hidden_size: 256
       rnn_type: "LSTM"
     VISUAL_ENCODER:
       hidden_size: 512
