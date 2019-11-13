@@ -277,10 +277,10 @@ class OracleSuccess(Measure):
 
 
 @registry.register_measure
-class OSPL(Measure):
-    r"""OSPL (Oracle Success weighted by Path Length)
+class OracleSPL(Measure):
+    r"""OracleSPL (Oracle Success weighted by Path Length)
 
-    OSPL = max(SPL) over all points in the agent path
+    OracleSPL = max(SPL) over all points in the agent path
     """
 
     def __init__(
@@ -295,7 +295,7 @@ class OSPL(Measure):
         super().__init__()
 
     def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "ospl"
+        return "oracle_spl"
 
     def reset_metric(self, *args: Any, episode, **kwargs: Any):
         self._previous_position = self._sim.get_agent_state().position.tolist()
@@ -334,6 +334,33 @@ class OSPL(Measure):
                     self._agent_episode_distance,
                 )
             )
+
+
+@registry.register_measure
+class StepsTaken(Measure):
+    r"""Counts the number of times update_metric() is called. This is equal to
+    the number of times that the agent takes an action. STOP counts as an
+    action.
+    """
+
+    def __init__(
+        self, *args: Any, sim: Simulator, config: Config, **kwargs: Any
+    ):
+        self._sim = sim
+        self._config = config
+        self._metric = 0
+        super().__init__()
+
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "steps_taken"
+
+    def reset_metric(self, *args: Any, episode, **kwargs: Any):
+        self._metric = 0
+
+    def update_metric(
+        self, *args: Any, episode, action, task: EmbodiedTask, **kwargs: Any
+    ):
+        self._metric += 1
 
 
 @registry.register_task(name="VLN-v0")

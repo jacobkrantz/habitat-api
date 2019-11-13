@@ -69,6 +69,26 @@ class RandomForwardAgent(RandomAgent):
         return {"action": action}
 
 
+class RandomStopAgent(RandomAgent):
+    def __init__(self, success_distance, goal_sensor_uuid):
+        super().__init__(success_distance, goal_sensor_uuid)
+        self.FORWARD_PROBABILITY = 0.8
+        self.STOP_PROBABILITY = 0.01
+
+    def act(self, observations):
+        rand = np.random.uniform(0, 1, 1)
+        if rand < self.FORWARD_PROBABILITY:
+            action = HabitatSimActions.MOVE_FORWARD
+        elif rand < self.FORWARD_PROBABILITY + self.STOP_PROBABILITY:
+            action = HabitatSimActions.STOP
+        else:
+            action = np.random.choice(
+                [HabitatSimActions.TURN_LEFT, HabitatSimActions.TURN_RIGHT]
+            )
+
+        return {"action": action}
+
+
 class GoalFollower(RandomAgent):
     def __init__(self, success_distance, goal_sensor_uuid):
         super().__init__(success_distance, goal_sensor_uuid)

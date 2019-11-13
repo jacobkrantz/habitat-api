@@ -1,18 +1,18 @@
 BASE_TASK_CONFIG_PATH: "configs/tasks/vln_r2r.yaml"
 TRAINER_NAME: "ppo_vln"
 ENV_NAME: "VLNRLEnv"
-SIMULATOR_GPU_ID: 1
-TORCH_GPU_ID: 1
+SIMULATOR_GPU_ID: 0
+TORCH_GPU_ID: 0
 VIDEO_OPTION: ["disk", "tensorboard"]
-TENSORBOARD_DIR: tensorboard_dirs/first_full/first_full_2
-VIDEO_DIR: "videos/first_full_2"
+TENSORBOARD_DIR: tensorboard_dirs/first_full/tmp
+VIDEO_DIR: "videos/tmp"
 TEST_EPISODE_COUNT: 10
-EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/first_full/first_full_2"
-NUM_PROCESSES: 2
+EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/first_full/tmp"
+NUM_PROCESSES: 1
 SENSORS: ["RGB_SENSOR", "DEPTH_SENSOR"]
-CHECKPOINT_FOLDER: "data/checkpoints/vln/first_full/first_full_2"
+CHECKPOINT_FOLDER: "data/checkpoints/vln/first_full/tmp"
 NUM_UPDATES: 5000000
-LOG_INTERVAL: 20  # 10
+LOG_INTERVAL: 10
 CHECKPOINT_INTERVAL: 500  # 100
 EVAL:
   USE_CKPT_CONFIG: False

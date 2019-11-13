@@ -20,6 +20,7 @@ from habitat_baselines.agents.simple_agents import (
     GoalFollower,
     RandomAgent,
     RandomForwardAgent,
+    RandomStopAgent,
 )
 
 
@@ -39,6 +40,11 @@ GoalFollower:
 ShortestPathAgent:
     takes the geodesic shortest path to the goal. If within the goal radius,
     takes action STOP.
+RandomStopAgent:
+    P(MOVE_FORWARD) = 80%
+    P(STOP) = 1%
+    P(TURN_LEFT) = 9.5%
+    P(TURN_RIGHT) = 9.5%
 """
 
 
@@ -130,9 +136,12 @@ def main():
         "GoalFollower",
         "PathFollower",
         "ShortestPathFollower",
+        "RandomStopAgent",
     ]:
         if agent_name == "PathFollower":
-            all_metrics[agent_name] = path_follower_benchmark(config_env)
+            all_metrics[agent_name] = path_follower_benchmark(
+                config_env, shortest=False
+            )
         elif agent_name == "ShortestPathFollower":
             all_metrics[agent_name] = path_follower_benchmark(
                 config_env, shortest=True

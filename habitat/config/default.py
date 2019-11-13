@@ -163,8 +163,13 @@ _C.TASK.ORACLE_SUCCESS.SUCCESS_DISTANCE = 0.2
 # ORACLE_SPL MEASUREMENT
 # -----------------------------------------------------------------------------
 _C.TASK.ORACLE_SPL = CN()
-_C.TASK.ORACLE_SPL.TYPE = "OSPL"
+_C.TASK.ORACLE_SPL.TYPE = "OracleSPL"
 _C.TASK.ORACLE_SPL.SUCCESS_DISTANCE = 0.2
+# -----------------------------------------------------------------------------
+# STEPS_TAKEN MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.STEPS_TAKEN = CN()
+_C.TASK.STEPS_TAKEN.TYPE = "StepsTaken"
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # # EQA TASK
