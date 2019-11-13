@@ -103,9 +103,6 @@ class PathLength(Measure):
 
         super().__init__(**kwargs)
 
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "path_length"
-
     def reset_metric(self, episode, *args: Any, **kwargs: Any):
         self._previous_position = self._sim.get_agent_state().position.tolist()
         self._start_end_episode_distance = self._sim.geodesic_distance(
@@ -134,6 +131,10 @@ class PathLength(Measure):
 
         self._metric = self._agent_episode_distance
 
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "path_length"
+
 
 @registry.register_measure
 class NavigationError(Measure):
@@ -153,9 +154,6 @@ class NavigationError(Measure):
         self._config = config
         super().__init__()
 
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "navigation_error"
-
     def reset_metric(self, *args: Any, episode, **kwargs: Any):
         self._metric = None
 
@@ -165,6 +163,10 @@ class NavigationError(Measure):
             current_position, episode.goals[0].position
         )
         self._metric = distance_to_target
+
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "navigation_error"
 
 
 @registry.register_measure
@@ -185,9 +187,6 @@ class OracleNavigationError(Measure):
         self._config = config
         super().__init__()
 
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "oracle_navigation_error"
-
     def reset_metric(self, *args: Any, episode, **kwargs: Any):
         self._metric = float("inf")
 
@@ -198,6 +197,10 @@ class OracleNavigationError(Measure):
         )
         if distance_to_target < self._metric:
             self._metric = distance_to_target
+
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "oracle_navigation_error"
 
 
 @registry.register_measure
@@ -215,9 +218,6 @@ class Success(Measure):
         self._config = config
         super().__init__()
 
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "success"
-
     def reset_metric(self, *args: Any, episode, **kwargs: Any):
         self._metric = 0
 
@@ -237,6 +237,10 @@ class Success(Measure):
             and distance_to_target < self._config.SUCCESS_DISTANCE
         ):
             self._metric = 1
+
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "success"
 
 
 @registry.register_measure
@@ -254,9 +258,6 @@ class OracleSuccess(Measure):
         self._config = config
         super().__init__()
 
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "oracle_success"
-
     def reset_metric(self, *args: Any, episode, **kwargs: Any):
         self._metric = 0
 
@@ -274,6 +275,10 @@ class OracleSuccess(Measure):
             and distance_to_target < self._config.SUCCESS_DISTANCE
         ):
             self._metric = 1
+
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "oracle_success"
 
 
 @registry.register_measure
@@ -293,9 +298,6 @@ class OracleSPL(Measure):
         self._sim = sim
         self._config = config
         super().__init__()
-
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "oracle_spl"
 
     def reset_metric(self, *args: Any, episode, **kwargs: Any):
         self._previous_position = self._sim.get_agent_state().position.tolist()
@@ -335,6 +337,10 @@ class OracleSPL(Measure):
                 )
             )
 
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "oracle_spl"
+
 
 @registry.register_measure
 class StepsTaken(Measure):
@@ -351,9 +357,6 @@ class StepsTaken(Measure):
         self._metric = 0
         super().__init__()
 
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "steps_taken"
-
     def reset_metric(self, *args: Any, episode, **kwargs: Any):
         self._metric = 0
 
@@ -361,6 +364,10 @@ class StepsTaken(Measure):
         self, *args: Any, episode, action, task: EmbodiedTask, **kwargs: Any
     ):
         self._metric += 1
+
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "steps_taken"
 
 
 @registry.register_task(name="VLN-v0")

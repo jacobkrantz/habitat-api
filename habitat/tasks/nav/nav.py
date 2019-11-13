@@ -433,9 +433,6 @@ class SPL(Measure):
 
         super().__init__()
 
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "spl"
-
     def reset_metric(self, *args: Any, episode, **kwargs: Any):
         self._previous_position = self._sim.get_agent_state().position.tolist()
         self._start_end_episode_distance = episode.info["geodesic_distance"]
@@ -477,6 +474,10 @@ class SPL(Measure):
             )
         )
 
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "spl"
+
 
 @registry.register_measure
 class Collisions(Measure):
@@ -486,7 +487,8 @@ class Collisions(Measure):
         self._metric = None
         super().__init__()
 
-    def _get_uuid(self, *args: Any, **kwargs: Any):
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
         return "collisions"
 
     def reset_metric(self, episode, *args: Any, **kwargs: Any):
@@ -531,9 +533,6 @@ class TopDownMap(Measure):
             np.round(self._map_resolution[0] * 2 / MAP_THICKNESS_SCALAR)
         )
         super().__init__()
-
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "top_down_map"
 
     def _check_valid_nav_point(self, point: List[float]):
         self._sim.is_navigable(point)
@@ -720,6 +719,10 @@ class TopDownMap(Measure):
                 / (self._coordinate_max - self._coordinate_min),
             )
 
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "top_down_map"
+
 
 @registry.register_measure
 class DistanceToGoal(Measure):
@@ -737,9 +740,6 @@ class DistanceToGoal(Measure):
         self._config = config
 
         super().__init__(**kwargs)
-
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "distance_to_goal"
 
     def reset_metric(self, episode, *args: Any, **kwargs: Any):
         self._previous_position = self._sim.get_agent_state().position.tolist()
@@ -776,6 +776,10 @@ class DistanceToGoal(Measure):
             "distance_ratio": distance_to_target
             / self._start_end_episode_distance,
         }
+
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "distance_to_goal"
 
 
 @registry.register_task_action

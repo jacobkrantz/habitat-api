@@ -82,14 +82,15 @@ class CorrectAnswer(Measure):
         self._dataset = dataset
         super().__init__(**kwargs)
 
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "correct_answer"
-
     def reset_metric(self, episode, *args: Any, **kwargs: Any):
         self._metric = episode.question.answer_token
 
     def update_metric(self, *args: Any, **kwargs: Any):
         pass
+
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "correct_answer"
 
 
 @registry.register_measure
@@ -103,14 +104,15 @@ class EpisodeInfo(Measure):
 
         super().__init__(**kwargs)
 
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "episode_info"
-
     def reset_metric(self, episode, *args: Any, **kwargs: Any):
         self._metric = vars(episode).copy()
 
     def update_metric(self, episode, action, *args: Any, **kwargs: Any):
         pass
+
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "episode_info"
 
 
 @registry.register_measure
@@ -121,9 +123,6 @@ class AnswerAccuracy(Measure):
     def __init__(self, dataset, *args: Any, **kwargs: Any):
         self._dataset = dataset
         super().__init__(**kwargs)
-
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "answer_accuracy"
 
     def reset_metric(self, episode, *args: Any, **kwargs: Any):
         self._metric = 0
@@ -141,6 +140,10 @@ class AnswerAccuracy(Measure):
                 == action["action_args"]["answer_id"]
                 else 0
             )
+
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "answer_accuracy"
 
 
 @registry.register_task(name="EQA-v0")

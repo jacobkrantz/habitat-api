@@ -102,9 +102,6 @@ class Measure:
         self.uuid = self._get_uuid(*args, **kwargs)
         self._metric = None
 
-    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
-        raise NotImplementedError
-
     def reset_metric(self, *args: Any, **kwargs: Any) -> None:
         r"""Reset `_metric`, this method is called from `env.Env` on each
         reset.
@@ -123,6 +120,10 @@ class Measure:
         :return: the current metric for `Measure`.
         """
         return self._metric
+
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any) -> str:
+        raise NotImplementedError
 
 
 class Metrics(dict):

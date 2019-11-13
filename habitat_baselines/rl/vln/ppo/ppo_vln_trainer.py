@@ -260,12 +260,16 @@ class PPOVLN_Trainer(BaseRLTrainer):
         current_episode_reward = torch.zeros(self.envs.num_envs, 1)
         window_episode_reward = deque(maxlen=ppo_cfg.reward_window_size)
         window_episode_counts = deque(maxlen=ppo_cfg.reward_window_size)
-        window_metrics = dict(
-            [
-                (m, deque(maxlen=ppo_cfg.reward_window_size))
-                for m in self.config.TASK_CONFIG.TASK.MEASUREMENTS
-            ]
-        )
+        window_metrics = {}
+        for metric_name in self.config.TASK_CONFIG.TASK.MEASUREMENTS:
+            metric_cfg = getattr(self.config.TASK_CONFIG.TASK, metric_name)
+            measure_type = baseline_registry.get_measure(metric_cfg.TYPE)
+            assert (
+                measure_type is not None
+            ), "invalid measurement type {}".format(metric_cfg.TYPE)
+            window_metrics[measure_type._get_uuid()] = deque(
+                maxlen=ppo_cfg.reward_window_size
+            )
 
         t_start = time.time()
         env_time = 0
@@ -324,7 +328,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
 
                 for info in infos_list:
                     for k in window_metrics.keys():
-                        window_metrics[k].append(info[k.lower()])
+                        window_metrics[k].append(info[k])
 
                 losses = [value_loss, action_loss]
                 stats = zip(
@@ -346,7 +350,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
                 )
 
                 for k, v in window_metrics.items():
-                    writer.add_scalar(k.lower(), np.mean(v), count_steps)
+                    writer.add_scalar(k, np.mean(v), count_steps)
 
                 writer.add_scalars(
                     "losses",
@@ -442,17 +446,6 @@ class PPOVLN_Trainer(BaseRLTrainer):
         self.agent.load_state_dict(ckpt_dict["state_dict"])
         self.actor_critic = self.agent.actor_critic
 
-        # get name of performance metric, e.g. "spl"
-        metric_name = self.config.TASK_CONFIG.TASK.MEASUREMENTS[0]
-        metric_cfg = getattr(self.config.TASK_CONFIG.TASK, metric_name)
-        measure_type = baseline_registry.get_measure(metric_cfg.TYPE)
-        assert measure_type is not None, "invalid measurement type {}".format(
-            metric_cfg.TYPE
-        )
-        self.metric_uuid = measure_type(
-            sim=None, task=None, config=None
-        )._get_uuid()
-
         observations = self.envs.reset()
         observations = transform_observations(
             observations, self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID
@@ -475,7 +468,7 @@ class PPOVLN_Trainer(BaseRLTrainer):
         not_done_masks = torch.zeros(
             self.config.NUM_PROCESSES, 1, device=self.device
         )
-        stats_episodes = dict()  # dict of dicts that stores stats per episode
+        stats_episodes = {}  # dict of dicts that stores stats per episode
 
         rgb_frames = [
             [] for _ in range(self.config.NUM_PROCESSES)
@@ -538,12 +531,29 @@ class PPOVLN_Trainer(BaseRLTrainer):
                 # episode ended
                 if not_done_masks[i].item() == 0:
                     episode_stats = dict()
-                    episode_stats[self.metric_uuid] = infos[i][
-                        self.metric_uuid
-                    ]
-                    episode_stats["success"] = int(
-                        infos[i][self.metric_uuid] > 0
-                    )
+                    video_metric_uuid = None
+                    for (
+                        metric_name
+                    ) in self.config.TASK_CONFIG.TASK.MEASUREMENTS:
+                        metric_cfg = getattr(
+                            self.config.TASK_CONFIG.TASK, metric_name
+                        )
+                        measure_type = baseline_registry.get_measure(
+                            metric_cfg.TYPE
+                        )
+                        assert (
+                            measure_type is not None
+                        ), "invalid measurement type {}".format(
+                            metric_cfg.TYPE
+                        )
+                        metric_uuid = measure_type._get_uuid()
+                        if not video_metric_uuid:
+                            video_metric_uuid = metric_uuid
+
+                        # only support scalar metrics
+                        if type(infos[i][metric_uuid]) != dict:
+                            episode_stats[metric_uuid] = infos[i][metric_uuid]
+
                     episode_stats["reward"] = current_episode_reward[i].item()
                     current_episode_reward[i] = 0
                     # use scene_id + episode_id as unique id for storing stats
@@ -561,8 +571,8 @@ class PPOVLN_Trainer(BaseRLTrainer):
                             images=rgb_frames[i],
                             episode_id=current_episodes[i].episode_id,
                             checkpoint_idx=checkpoint_index,
-                            metric_name=self.metric_uuid,
-                            metric_value=infos[i][self.metric_uuid],
+                            metric_name=video_metric_uuid,
+                            metric_value=infos[i][video_metric_uuid],
                             tb_writer=writer,
                         )
 
@@ -595,37 +605,18 @@ class PPOVLN_Trainer(BaseRLTrainer):
                 rgb_frames,
             )
 
-        aggregated_stats = dict()
-        for stat_key in next(iter(stats_episodes.values())).keys():
-            aggregated_stats[stat_key] = sum(
-                [v[stat_key] for v in stats_episodes.values()]
-            )
+        aggregated_stats = {}
         num_episodes = len(stats_episodes)
+        for stat_key in next(iter(stats_episodes.values())).keys():
+            aggregated_stats[stat_key] = (
+                sum([v[stat_key] for v in stats_episodes.values()])
+                / num_episodes
+            )
 
-        episode_reward_mean = aggregated_stats["reward"] / num_episodes
-        episode_metric_mean = aggregated_stats[self.metric_uuid] / num_episodes
-        episode_success_mean = aggregated_stats["success"] / num_episodes
-
-        logger.info(f"Average episode reward: {episode_reward_mean:.6f}")
-        logger.info(f"Average episode success: {episode_success_mean:.6f}")
-        logger.info(
-            f"Average episode {self.metric_uuid}: {episode_metric_mean:.6f}"
-        )
-
-        writer.add_scalars(
-            "eval_reward",
-            {"average reward": episode_reward_mean},
-            checkpoint_index,
-        )
-        writer.add_scalars(
-            f"eval_{self.metric_uuid}",
-            {f"average {self.metric_uuid}": episode_metric_mean},
-            checkpoint_index,
-        )
-        writer.add_scalars(
-            "eval_success",
-            {"average success": episode_success_mean},
-            checkpoint_index,
-        )
+        for k, v in aggregated_stats.items():
+            logger.info(f"Average episode {k}: {v:.6f}")
+            writer.add_scalars(
+                f"eval_{k}", {f"Average_{k}": v}, checkpoint_index
+            )
 
         self.envs.close()

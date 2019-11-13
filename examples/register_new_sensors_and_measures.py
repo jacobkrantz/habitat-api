@@ -22,10 +22,6 @@ class EpisodeInfoExample(habitat.Measure):
 
         super().__init__()
 
-    # Defines the name of the measure in the measurements dictionary
-    def _get_uuid(self, *args: Any, **kwargs: Any):
-        return "episode_info"
-
     # This is called whenver the environment is reset
     def reset_metric(self, *args: Any, episode, **kwargs: Any):
         # Our measure always contains all the attributes of the episode
@@ -37,6 +33,11 @@ class EpisodeInfoExample(habitat.Measure):
     def update_metric(self, *args: Any, episode, action, **kwargs: Any):
         # Now the measure will just have all the attributes of the episode
         self._metric = vars(episode).copy()
+
+    # Defines the name of the measure in the measurements dictionary
+    @staticmethod
+    def _get_uuid(*args: Any, **kwargs: Any):
+        return "episode_info"
 
 
 # Define the sensor and register it with habitat
