@@ -7,14 +7,16 @@ SIMULATOR:
   TURN_ANGLE: 15
   HABITAT_SIM_V0:
     GPU_DEVICE_ID: 0
+  # ResNet takes images of dimension [3x224x224]
+  # could alternatively scaled imension of image down in resnet code
   RGB_SENSOR:
-    WIDTH: 256
-    HEIGHT: 256
+    WIDTH: 224
+    HEIGHT: 224
     HFOV: 45
     TYPE: HabitatSimRGBSensor
   DEPTH_SENSOR:
-    WIDTH: 256
-    HEIGHT: 256
+    WIDTH: 224
+    HEIGHT: 224
 TASK:
   TYPE: VLN-v0
   SUCCESS_DISTANCE: 3.0
@@ -41,6 +43,6 @@ TASK:
     SUCCESS_DISTANCE: 3.0
 DATASET:
   TYPE: R2RVLN-v1
-  SPLIT: train
-  DATA_PATH: "./data/datasets/vln/r2r/preprocessed/v1/small_train.json.gz"
+  SPLIT: debug
+  DATA_PATH: "./data/datasets/vln/r2r/preprocessed/v1/{split}/{split}.json.gz"
   SCENES_DIR: "data/scene_datasets/"

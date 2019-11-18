@@ -5,7 +5,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import json
 import sys
+import time
 from collections import defaultdict
 
 import numpy as np
@@ -80,10 +82,16 @@ def path_follower_benchmark(config, mode="geodesic_path", shortest=False):
                 best_action = follower.get_next_action(point)
                 if best_action == None:
                     break
-                env.step(best_action)
+                obs, reward, done, info = env.step(best_action)
                 steps += 1
 
-        obs, reward, done, info = env.step(HabitatSimActions.STOP)
+        if not done:
+            obs, reward, done, info = env.step(HabitatSimActions.STOP)
+        else:
+            print("episode problem:", episode_id)
+            print("Agent did not reach goal within max steps.")
+            with open(f"{episode_id}.txt", "w") as f:
+                json.dump(info, f, indent=4)
         for k, v in info.items():
             metrics[k].append(v)
 
@@ -130,12 +138,8 @@ def main():
 
     all_metrics = {}
     for agent_name in [
-        "RandomAgent",
-        "ForwardOnlyAgent",
-        "RandomForwardAgent",
-        "GoalFollower",
         "PathFollower",
-        "ShortestPathFollower",
+        # "ShortestPathFollower",
         "RandomStopAgent",
     ]:
         if agent_name == "PathFollower":
@@ -153,11 +157,14 @@ def main():
             )
             all_metrics[agent_name] = benchmark(agent, config_env)
 
-    for agent_name, metrics in all_metrics.items():
-        print(f"Benchmark for agent {agent_name}:")
-        for k, v in metrics.items():
-            print("{}: {:.3f}".format(k, v))
-        print("")
+        with open(f"{agent_name}_{config_env.DATASET.SPLIT}.json", "w") as f:
+            json.dump(all_metrics, f, indent=4)
+        for agent_name, metrics in all_metrics.items():
+            time.sleep(3)
+            print(f"\nBenchmark for agent {agent_name}:")
+            for k, v in metrics.items():
+                print("{}: {:.3f}".format(k, v))
+            print("\n\n")
 
 
 if __name__ == "__main__":

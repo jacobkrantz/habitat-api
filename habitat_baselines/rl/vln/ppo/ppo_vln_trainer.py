@@ -59,6 +59,11 @@ class PPOVLN_Trainer(BaseRLTrainer):
         """
         logger.add_filehandler(self.config.LOG_FILE)
 
+        # Add TORCH_GPU_ID to VLN config for a ResNet layer
+        rl_cfg.defrost()
+        rl_cfg.VLN.TORCH_GPU_ID = self.config.TORCH_GPU_ID
+        rl_cfg.freeze()
+
         self.actor_critic = VLNBaselinePolicy(
             observation_space=self.envs.observation_spaces[0],
             action_space=self.envs.action_spaces[0],
@@ -286,8 +291,9 @@ class PPOVLN_Trainer(BaseRLTrainer):
             self.config.TENSORBOARD_DIR, flush_secs=self.flush_secs
         ) as writer:
             for update in range(self.config.NUM_UPDATES):
-                if ppo_cfg.use_linear_lr_decay:
-                    lr_scheduler.step()
+                # # this is where Eric originally updated lr:
+                # if ppo_cfg.use_linear_lr_decay:
+                #     lr_scheduler.step()
 
                 if ppo_cfg.use_linear_clip_decay:
                     self.agent.clip_param = ppo_cfg.clip_param * linear_decay(
@@ -321,6 +327,10 @@ class PPOVLN_Trainer(BaseRLTrainer):
                     action_loss,
                     dist_entropy,
                 ) = self._update_agent(ppo_cfg, rollouts)
+
+                # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+                if ppo_cfg.use_linear_lr_decay:
+                    lr_scheduler.step()
                 pth_time += delta_pth_time
 
                 window_episode_reward.append(episode_rewards.clone())

@@ -4,13 +4,13 @@ ENV_NAME: "VLNRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID: 0
 VIDEO_OPTION: ["disk", "tensorboard"]
-TENSORBOARD_DIR: tensorboard_dirs/first_full/tmp
-VIDEO_DIR: "videos/tmp"
+TENSORBOARD_DIR: tensorboard_dirs/debug/debug
+VIDEO_DIR: "videos/debug"
 TEST_EPISODE_COUNT: 10
-EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/first_full/tmp"
+EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/debug/debug"
 NUM_PROCESSES: 1
 SENSORS: ["RGB_SENSOR", "DEPTH_SENSOR"]
-CHECKPOINT_FOLDER: "data/checkpoints/vln/first_full/tmp"
+CHECKPOINT_FOLDER: "data/checkpoints/vln/debug/debug"
 NUM_UPDATES: 5000000
 LOG_INTERVAL: 10
 CHECKPOINT_INTERVAL: 500  # 100
@@ -19,9 +19,12 @@ EVAL:
   SPLIT: train
 
 RL:
+  SUCCESS_REWARD: 10.0
+  SLACK_REWARD: -0.01
+
   PPO:
     # ppo params
-    clip_param: 0.1
+    clip_param: 0.2  # 0.1
     ppo_epoch: 4
     num_mini_batch: 1
     value_loss_coef: 0.5
@@ -52,7 +55,8 @@ RL:
       hidden_size: 256
       rnn_type: "LSTM"
     VISUAL_ENCODER:
-      hidden_size: 512
+      cnn_type: "ResNet50"
+      output_size: 512
     STATE_ENCODER:
       hidden_size: 512
       rnn_type: "GRU"  # Currently only works with GRU

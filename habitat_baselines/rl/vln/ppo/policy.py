@@ -13,6 +13,7 @@ from gym import Space
 from habitat import Config
 from habitat_baselines.common.utils import CategoricalNet, Flatten
 from habitat_baselines.rl.models.instruction_encoder import InstructionEncoder
+from habitat_baselines.rl.models.resnet import ResNet50
 from habitat_baselines.rl.models.rnn_state_encoder import RNNStateEncoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN
 from habitat_baselines.rl.ppo.policy import Net, Policy
@@ -43,13 +44,30 @@ class VLNBaselineNet(Net):
             vln_config.INSTRUCTION_ENCODER
         )
 
-        self.visual_encoder = SimpleCNN(
-            observation_space, vln_config.VISUAL_ENCODER.hidden_size
-        )
+        if vln_config.VISUAL_ENCODER.cnn_type == "SimpleCNN":
+            self.visual_encoder = SimpleCNN(
+                observation_space, vln_config.VISUAL_ENCODER.output_size
+            )
+        elif vln_config.VISUAL_ENCODER.cnn_type == "ResNet50":
+            device = (
+                torch.device("cuda", vln_config.TORCH_GPU_ID)
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
+            self.visual_encoder = ResNet50(
+                observation_space,
+                vln_config.VISUAL_ENCODER.output_size,
+                device,
+            )
+        else:
+            assert vln_config.VISUAL_ENCODER.cnn_type in [
+                "SimpleCNN",
+                "ResNet50",
+            ], "VISUAL_ENCODER.cnn_type must be either 'SimpleCNN' or 'ResNet50'."
 
         rnn_input_size = self.instruction_encoder.output_size
         if not self.is_blind:
-            rnn_input_size += vln_config.VISUAL_ENCODER.hidden_size
+            rnn_input_size += vln_config.VISUAL_ENCODER.output_size
 
         self.state_encoder = RNNStateEncoder(
             input_size=rnn_input_size,

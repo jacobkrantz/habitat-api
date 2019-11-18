@@ -1,4 +1,5 @@
-torch==1.1.0
+torch==1.2.0
+torchvision==0.2.2.post3
 # full tensorflow required for tensorboard video support
 tensorflow==1.13.1
 tb-nightly
