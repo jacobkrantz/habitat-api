@@ -15,7 +15,11 @@ from habitat_baselines.common.utils import CategoricalNet, Flatten
 from habitat_baselines.rl.models.instruction_encoder import InstructionEncoder
 from habitat_baselines.rl.models.resnet import ResNet50
 from habitat_baselines.rl.models.rnn_state_encoder import RNNStateEncoder
-from habitat_baselines.rl.models.simple_cnn import SimpleCNN
+from habitat_baselines.rl.models.simple_cnn import (
+    SimpleCNN,
+    SimpleDepthCNN,
+    SimpleRGBCNN,
+)
 from habitat_baselines.rl.ppo.policy import Net, Policy
 
 
@@ -34,18 +38,40 @@ class VLNBaselinePolicy(Policy):
 class VLNBaselineNet(Net):
     r"""Network which passes the input image through CNN and concatenates
     goal vector with CNN's output and passes that through RNN.
+
+    Modules:
+        Instruction encoder
+        Depth encoder
+        Visual (RGB) encoder
+        RNN state decoder
     """
 
     def __init__(self, observation_space: Space, vln_config: Config):
         super().__init__()
         self.vln_config = vln_config
 
+        # Init the instruction encoder
         self.instruction_encoder = InstructionEncoder(
             vln_config.INSTRUCTION_ENCODER
         )
 
-        if vln_config.VISUAL_ENCODER.cnn_type == "SimpleCNN":
-            self.visual_encoder = SimpleCNN(
+        # Init the depth encoder
+        assert vln_config.DEPTH_ENCODER.cnn_type in [
+            "SimpleDepthCNN"
+        ], "DEPTH_ENCODER.cnn_type must be SimpleDepthCNN"
+        if vln_config.DEPTH_ENCODER.cnn_type == "SimpleDepthCNN":
+            self.depth_encoder = SimpleDepthCNN(
+                observation_space, vln_config.DEPTH_ENCODER.output_size
+            )
+
+        # Init the RGB visual encoder
+        assert vln_config.VISUAL_ENCODER.cnn_type in [
+            "SimpleCNN",
+            "ResNet50",
+        ], "VISUAL_ENCODER.cnn_type must be either 'SimpleCNN' or 'ResNet50'."
+
+        if vln_config.VISUAL_ENCODER.cnn_type == "SimpleRGBCNN":
+            self.visual_encoder = SimpleRGBCNN(
                 observation_space, vln_config.VISUAL_ENCODER.output_size
             )
         elif vln_config.VISUAL_ENCODER.cnn_type == "ResNet50":
@@ -59,15 +85,11 @@ class VLNBaselineNet(Net):
                 vln_config.VISUAL_ENCODER.output_size,
                 device,
             )
-        else:
-            assert vln_config.VISUAL_ENCODER.cnn_type in [
-                "SimpleCNN",
-                "ResNet50",
-            ], "VISUAL_ENCODER.cnn_type must be either 'SimpleCNN' or 'ResNet50'."
 
+        # Init the RNN state decoder
         rnn_input_size = self.instruction_encoder.output_size
-        if not self.is_blind:
-            rnn_input_size += vln_config.VISUAL_ENCODER.output_size
+        rnn_input_size += vln_config.DEPTH_ENCODER.output_size
+        rnn_input_size += vln_config.VISUAL_ENCODER.output_size
 
         self.state_encoder = RNNStateEncoder(
             input_size=rnn_input_size,
@@ -84,23 +106,24 @@ class VLNBaselineNet(Net):
 
     @property
     def is_blind(self):
-        return self.visual_encoder.is_blind
+        return self.visual_encoder.is_blind or self.depth_encoder.is_blind
 
     @property
     def num_recurrent_layers(self):
         return self.state_encoder.num_recurrent_layers
 
     def forward(self, observations, rnn_hidden_states, prev_actions, masks):
-        instruction_embed = self.instruction_encoder(observations)
-        x = [instruction_embed]  # size: [batch_size x 512]
+        r"""
+        instruction_embedding: [batch_size x INSTRUCTION_ENCODER.output_size]
+        depth_embedding: [batch_size x DEPTH_ENCODER.output_size]
+        rgb_embedding: [batch_size x VISUAL_ENCODER.output_size]
+        """
+        instruction_embedding = self.instruction_encoder(observations)
+        depth_embedding = self.depth_encoder(observations)
+        rgb_embedding = self.visual_encoder(observations)
 
-        if not self.is_blind:
-            perception_embed = self.visual_encoder(
-                observations
-            )  # size: [batch_size x 512]
-            x = [perception_embed] + x
-
-        x = torch.cat(x, dim=1)  # size: [batch_size x 1024]
+        x = torch.cat(
+            [instruction_embedding, depth_embedding, rgb_embedding], dim=1
+        )
         x, rnn_hidden_states = self.state_encoder(x, rnn_hidden_states, masks)
-
         return x, rnn_hidden_states

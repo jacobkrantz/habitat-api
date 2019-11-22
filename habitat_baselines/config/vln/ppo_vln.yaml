@@ -54,6 +54,9 @@ RL:
       embedding_size: 50
       hidden_size: 256
       rnn_type: "LSTM"
+    DEPTH_ENCODER:
+      cnn_type: "SimpleDepthCNN"
+      output_size: 512
     VISUAL_ENCODER:
       cnn_type: "ResNet50"
       output_size: 512

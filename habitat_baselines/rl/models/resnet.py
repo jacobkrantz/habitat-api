@@ -10,7 +10,7 @@ from habitat_baselines.common.utils import Flatten
 
 class ResNet50(nn.Module):
     r"""
-    Takes in observations and produces an embedding of the rgb and/or depth components
+    Takes in observations and produces an embedding of the rgb component.
 
     Args:
         observation_space: The observation_space of the agent
@@ -35,12 +35,6 @@ class ResNet50(nn.Module):
         else:
             self._n_input_rgb = 0
 
-        if "depth" in observation_space.spaces:
-            self._n_input_depth = observation_space.spaces["depth"].shape[2]
-            linear_layer_input_size += self.resnet_layer_size
-        else:
-            self._n_input_depth = 0
-
         if self.is_blind:
             self.cnn = nn.Sequential()
             return
@@ -58,17 +52,12 @@ class ResNet50(nn.Module):
 
     @property
     def is_blind(self):
-        return self._n_input_rgb + self._n_input_depth == 0
+        return self._n_input_rgb == 0
 
     def forward(self, observations):
-        r"""Sends RGB observation through pre-trained ResNet50. Repeats Depth
-        channel 3 times then sends depth observation through ResNet50.
-        Concatenates resulting vectors. Sends through fully connected layer,
-        activates with tanh, and returns final embedding.
-
-        Applies a tanh activation over the reduced ResNet output.
-        Not sure if we should just have the fully connected linear layer or
-        this added non-linearity on top of it.
+        r"""Sends RGB observation through ResNet50 pre-trained on ImageNet.
+        Sends through fully connected layer, activates with tanh, and returns
+        final embedding.
         """
 
         def resnet_forward(observation):
@@ -86,23 +75,8 @@ class ResNet50(nn.Module):
             h.remove()
             return resnet_output
 
-        output = []
-        if self._n_input_rgb > 0:
-            # permute tensor to dimension [BATCH x CHANNEL x HEIGHT x WIDTH]
-            rgb_observations = observations["rgb"].permute(0, 3, 1, 2)
-            rgb_observations = rgb_observations / 255.0  # normalize RGB
-            a = resnet_forward(rgb_observations)
-            output.append(a)
-
-        if self._n_input_depth > 0:
-            depth_observations = observations["depth"].permute(0, 3, 1, 2)
-
-            # pre-trained ResNet can only handle 3-channel data. Work-around:
-            #   Repeat the single channel values for three channels.
-            depth_observations = depth_observations.repeat_interleave(
-                repeats=3, dim=1
-            )
-            output.append(resnet_forward(depth_observations))
-
-        output = torch.cat(output, dim=1)
-        return self.activation(self.fc(output))  # [BATCH x OUTPUT_DIM]
+        # permute tensor to dimension [BATCH x CHANNEL x HEIGHT x WIDTH]
+        rgb_observations = observations["rgb"].permute(0, 3, 1, 2)
+        rgb_observations = rgb_observations / 255.0  # normalize RGB
+        resnet_output = resnet_forward(rgb_observations)
+        return self.activation(self.fc(resnet_output))  # [BATCH x OUTPUT_DIM]

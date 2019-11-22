@@ -291,10 +291,6 @@ class PPOVLN_Trainer(BaseRLTrainer):
             self.config.TENSORBOARD_DIR, flush_secs=self.flush_secs
         ) as writer:
             for update in range(self.config.NUM_UPDATES):
-                # # this is where Eric originally updated lr:
-                # if ppo_cfg.use_linear_lr_decay:
-                #     lr_scheduler.step()
-
                 if ppo_cfg.use_linear_clip_decay:
                     self.agent.clip_param = ppo_cfg.clip_param * linear_decay(
                         update, self.config.NUM_UPDATES
