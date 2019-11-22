@@ -150,6 +150,7 @@ def shortest_path_example(mode):
         ]
         for point in path:
             done = False
+            print("Completed")
             while not done:
                 best_action = follower.get_next_action(point)
                 if best_action == None:
