@@ -75,7 +75,8 @@ _C.RL.PPO.use_normalized_advantage = True
 # -----------------------------------------------------------------------------
 _C.RL.VLN = CN()
 _C.RL.VLN.INSTRUCTION_ENCODER = CN()
-_C.RL.VLN.INSTRUCTION_ENCODER.vocab_size = 5000  # HACK
+_C.RL.VLN.INSTRUCTION_ENCODER.vocab_size = 5000
+_C.RL.VLN.INSTRUCTION_ENCODER.max_length = 200
 _C.RL.VLN.INSTRUCTION_ENCODER.use_pretrained_embeddings = False
 _C.RL.VLN.INSTRUCTION_ENCODER.embedding_file = "data/glove/glove.42B.300d.txt"
 _C.RL.VLN.INSTRUCTION_ENCODER.dataset_vocab = (

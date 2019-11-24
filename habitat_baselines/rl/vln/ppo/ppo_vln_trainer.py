@@ -11,6 +11,7 @@ from typing import Dict, List
 
 import numpy as np
 import torch
+from gym import spaces
 from torch.optim.lr_scheduler import LambdaLR
 
 from habitat import Config, logger
@@ -235,6 +236,15 @@ class PPOVLN_Trainer(BaseRLTrainer):
                 sum(param.numel() for param in self.agent.parameters())
             )
         )
+
+        # set the observation space for instructions according to config
+        for i in range(len(self.envs.observation_spaces)):
+            self.envs.observation_spaces[i].spaces["instruction"] = spaces.Box(
+                low=0,
+                high=self.config.RL.VLN.INSTRUCTION_ENCODER.vocab_size,
+                shape=(self.config.RL.VLN.INSTRUCTION_ENCODER.max_length,),
+                dtype=np.float32,
+            )
 
         rollouts = RolloutStorage(
             ppo_cfg.num_steps,

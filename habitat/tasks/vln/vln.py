@@ -11,10 +11,13 @@
 from typing import Any, Dict, List, Optional
 
 import attr
+import numpy as np
 from gym import spaces
 
+from habitat.config import Config
+from habitat.core.embodied_task import EmbodiedTask, Measure
 from habitat.core.registry import registry
-from habitat.core.simulator import Observations, Sensor
+from habitat.core.simulator import Observations, Sensor, Simulator
 from habitat.core.utils import not_none_validator
 from habitat.tasks.nav.nav import NavigationEpisode, NavigationTask
 

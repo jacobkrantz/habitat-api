@@ -46,10 +46,11 @@ RL:
   VLN:
     # Vision and Language Navigation parameters
     INSTRUCTION_ENCODER:
-      vocab_size: 2505
+      vocab_size: 2504
+      max_length: 153
       use_pretrained_embeddings: True
-      embedding_file: "./data/datasets/vln/r2r/preprocessed/v1/embeddings.json"
-      dataset_vocab: "./data/datasets/vln/r2r/preprocessed/v1/train/train.json.gz"
+      embedding_file: "./data/datasets/vln/mp3d/r2r/v1/preprocessed/embeddings.json"
+      dataset_vocab: "./data/datasets/vln/mp3d/r2r/v1/preprocessed/train/train.json.gz"
       fine_tune_embeddings: False
       embedding_size: 50
       hidden_size: 256

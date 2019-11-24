@@ -8,7 +8,7 @@ SIMULATOR:
   HABITAT_SIM_V0:
     GPU_DEVICE_ID: 0
   # ResNet takes images of dimension [3x224x224]
-  # could alternatively scaled imension of image down in resnet code
+  # could alternatively scale dimension of image down in resnet code
   RGB_SENSOR:
     WIDTH: 224
     HEIGHT: 224
@@ -45,5 +45,5 @@ TASK:
 DATASET:
   TYPE: R2RVLN-v1
   SPLIT: debug
-  DATA_PATH: "./data/datasets/vln/r2r/preprocessed/v1/{split}/{split}.json.gz"
+  DATA_PATH: "./data/datasets/vln/mp3d/r2r/v1/preprocessed/{split}/{split}.json.gz"
   SCENES_DIR: "data/scene_datasets/"
