@@ -116,11 +116,19 @@ _C.TASK.SPL.SUCCESS_DISTANCE = 0.2
 # -----------------------------------------------------------------------------
 _C.TASK.NDTW = CN()
 _C.TASK.NDTW.TYPE = "NDTW"
-_C.TASK.NDTW.METRICS = ["NDTW", "SDTW"]
 _C.TASK.NDTW.SPLIT = "val_seen"
 _C.TASK.NDTW.FDTW = True
 _C.TASK.NDTW.GT_PATH = "data/datasets/vln/r2r/v1/{split}/{split}_gt.json"
 _C.TASK.NDTW.SUCCESS_DISTANCE = 0.3
+# -----------------------------------------------------------------------------
+# SDTW MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.SDTW = CN()
+_C.TASK.SDTW.TYPE = "SDTW"
+_C.TASK.SDTW.SPLIT = "val_seen"
+_C.TASK.SDTW.FDTW = True
+_C.TASK.SDTW.GT_PATH = "data/datasets/vln/r2r/v1/{split}/{split}_gt.json"
+_C.TASK.SDTW.SUCCESS_DISTANCE = 0.3
 # -----------------------------------------------------------------------------
 # TopDownMap MEASUREMENT
 # -----------------------------------------------------------------------------

@@ -25,7 +25,8 @@ TASK:
   POSSIBLE_ACTIONS: ['STOP', 'MOVE_FORWARD', 'TURN_LEFT', 'TURN_RIGHT']
   MEASUREMENTS: [
     'SPL',
-    'ORACLE_SPL',
+    'NDTW',
+    'SDTW',
     'PATH_LENGTH',
     'NAVIGATION_ERROR',
     'ORACLE_NAVIGATION_ERROR',
@@ -33,17 +34,27 @@ TASK:
     'ORACLE_SUCCESS',
     'STEPS_TAKEN'
   ]
+  NDTW:
+    TYPE: NDTW
+    FDTW: True  # False: DTW
+    SPLIT: val_seen
+    SUCCESS_DISTANCE: 3.0
+    GT_PATH: "data/datasets/vln/mp3d/r2r/v1/preprocessed/{split}/{split}_gt_all.json.gz"
+  SDTW:
+    TYPE: SDTW
+    FDTW: True  # False: DTW
+    SPLIT: val_seen
+    SUCCESS_DISTANCE: 3.0
+    GT_PATH: "data/datasets/vln/mp3d/r2r/v1/preprocessed/{split}/{split}_gt_all.json.gz"
+  SPL:
+    TYPE: SPL
+    SUCCESS_DISTANCE: 3.0
   SUCCESS:
     SUCCESS_DISTANCE: 3.0
   ORACLE_SUCCESS:
     SUCCESS_DISTANCE: 3.0
-  SPL:
-    TYPE: SPL
-    SUCCESS_DISTANCE: 3.0
-  ORACLE_SPL:
-    SUCCESS_DISTANCE: 3.0
 DATASET:
   TYPE: R2RVLN-v1
-  SPLIT: debug
+  SPLIT: val_seen
   DATA_PATH: "./data/datasets/vln/mp3d/r2r/v1/preprocessed/{split}/{split}.json.gz"
   SCENES_DIR: "data/scene_datasets/"

@@ -23,17 +23,22 @@ TASK:
     DIMENSIONALITY: 2
   GOAL_SENSOR_UUID: pointgoal_with_gps_compass
   INSTRUCTION_SENSOR_UUID: instruction
-  MEASUREMENTS: ['SPL', 'NDTW]
+  MEASUREMENTS: ['SPL', 'NDTW', 'SDTW']
   SPL:
     TYPE: SPL
     SUCCESS_DISTANCE: 3.0
   NDTW:
     TYPE: NDTW
-    METRICS: ["NDTW", "SDTW"]
     FDTW: True  # False: DTW
-    SPLIT: train
+    SPLIT: val_seen
     SUCCESS_DISTANCE: 3.0
-    GT_PATH: "data/datasets/vln/r2r/v1/{split}/{split}_gt.json.gz"
+    GT_PATH: "data/datasets/vln/mp3d/r2r/v1/{split}/{split}_gt_all.json.gz"
+  SDTW:
+    TYPE: SDTW
+    FDTW: True  # False: DTW
+    SPLIT: val_seen
+    SUCCESS_DISTANCE: 3.0
+    GT_PATH: "data/datasets/vln/mp3d/r2r/v1/{split}/{split}_gt_all.json.gz"
 
 DATASET:
   TYPE: R2RVLN-v1
