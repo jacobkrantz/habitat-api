@@ -20,7 +20,11 @@ EVAL:
 
 RL:
   SUCCESS_REWARD: 10.0
-  SLACK_REWARD: -0.01
+  SLACK_REWARD: -0.01  # not used in VLNRLEnv. MOVEMENT_EFFORT_REWARD ==
+                       # LOOKING_EFFORT_REWARD is equivalent to setting
+                       # SLACK_REWARD.
+  MOVEMENT_EFFORT_REWARD: -0.01
+  LOOKING_EFFORT_REWARD: 0.0
 
   PPO:
     # ppo params
@@ -41,8 +45,8 @@ RL:
     use_linear_lr_decay: True
     reward_window_size: 50
     use_normalized_advantage: False # True for pointnav, but can hurt settings
-                              # like ObjectNav or PointNav when no GPS+Compass
-                              # sensor is involved.
+                                    # like ObjectNav or PointNav when no GPS+Compass
+                                    # sensor is involved.
   VLN:
     # Vision and Language Navigation parameters
     INSTRUCTION_ENCODER:

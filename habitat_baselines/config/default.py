@@ -49,6 +49,8 @@ _C.EVAL.USE_CKPT_CONFIG = True
 _C.RL = CN()
 _C.RL.SUCCESS_REWARD = 10.0
 _C.RL.SLACK_REWARD = -0.01
+_C.RL.MOVEMENT_EFFORT_REWARD = -0.01
+_C.RL.LOOKING_EFFORT_REWARD = -0.01
 # -----------------------------------------------------------------------------
 # PROXIMAL POLICY OPTIMIZATION (PPO)
 # -----------------------------------------------------------------------------

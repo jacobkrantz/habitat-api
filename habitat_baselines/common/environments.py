@@ -126,8 +126,12 @@ class VLNRLEnv(habitat.RLEnv):
         return super().step(*args, **kwargs)
 
     def get_reward_range(self):
-        return (
-            self._rl_config.SLACK_REWARD - 1.0,
+        effort_reward = min(
+            self._rl_config.MOVEMENT_EFFORT_REWARD,
+            self._rl_config.LOOKING_EFFORT_REWARD,
+        )
+        return (  # loose bounds
+            effort_reward - 1.0,
             self._rl_config.SUCCESS_REWARD + 1.0,
         )
 
@@ -137,6 +141,12 @@ class VLNRLEnv(habitat.RLEnv):
         current_target_distance = self._distance_target()
         reward += self._previous_target_distance - current_target_distance
         self._previous_target_distance = current_target_distance
+
+        # Instead of a penalty for being alive, apply an "effort" penalty.
+        if reward == 0.0:
+            reward += self._rl_config.LOOKING_EFFORT_REWARD
+        else:
+            reward += self._rl_config.MOVEMENT_EFFORT_REWARD
 
         if self._episode_success():
             reward += self._rl_config.SUCCESS_REWARD
