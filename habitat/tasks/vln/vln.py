@@ -225,19 +225,16 @@ class Success(Measure):
     def update_metric(
         self, *args: Any, episode, action, task: EmbodiedTask, **kwargs: Any
     ):
-        self._metric = 0
         current_position = self._sim.get_agent_state().position.tolist()
-
         distance_to_target = self._sim.geodesic_distance(
             current_position, episode.goals[0].position
         )
 
-        if (
+        self._metric = (
             hasattr(task, "is_stop_called")
             and task.is_stop_called
             and distance_to_target < self._config.SUCCESS_DISTANCE
-        ):
-            self._metric = 1
+        )
 
     @staticmethod
     def _get_uuid(*args: Any, **kwargs: Any):
@@ -265,16 +262,16 @@ class OracleSuccess(Measure):
     def update_metric(
         self, *args: Any, episode, action, task: EmbodiedTask, **kwargs: Any
     ):
+        if self._metric:
+            # skip, already had oracle success
+            return
+
         current_position = self._sim.get_agent_state().position.tolist()
         distance_to_target = self._sim.geodesic_distance(
             current_position, episode.goals[0].position
         )
 
-        if (
-            hasattr(task, "is_stop_called")
-            and task.is_stop_called
-            and distance_to_target < self._config.SUCCESS_DISTANCE
-        ):
+        if distance_to_target < self._config.SUCCESS_DISTANCE:
             self._metric = 1
 
     @staticmethod

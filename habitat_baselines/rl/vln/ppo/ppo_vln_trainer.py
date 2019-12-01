@@ -374,6 +374,8 @@ class PPOVLN_Trainer(BaseRLTrainer):
                     count_steps,
                 )
 
+                writer.add_scalar("entropy", dist_entropy, count_steps)
+
                 # log stats
                 if update > 0 and update % self.config.LOG_INTERVAL == 0:
                     logger.info(
