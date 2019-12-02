@@ -17,7 +17,7 @@ from habitat import Config, Dataset
 from habitat_baselines.common.baseline_registry import baseline_registry
 
 
-def get_env_class(env_name: str) -> Type[habitat.RLEnv]:
+def get_env_class(env_name: str) -> Type[Union[habitat.RLEnv, habitat.Env]]:
     r"""Return environment class based on name.
 
     Args:
@@ -167,3 +167,23 @@ class VLNRLEnv(habitat.RLEnv):
 
     def get_info(self, observations):
         return self.habitat_env.get_metrics()
+
+
+@baseline_registry.register_env(name="VLNILEnv")
+class VLNILEnv(habitat.Env):
+    def __init__(self, config: Config, dataset: Optional[Dataset] = None):
+        super().__init__(config.TASK_CONFIG, dataset)
+
+    def reset(self):
+        observations = super().reset()
+        return observations
+
+    def step(self, *args, **kwargs):
+        kwargs["action"]
+        return super().step(*args, **kwargs)
+
+    def get_episode_over(self):
+        """When in a VectorEnv, properties cannot be queried. Thus make this a
+        function to be called.
+        """
+        return self.episode_over

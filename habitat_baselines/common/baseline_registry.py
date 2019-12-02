@@ -46,16 +46,41 @@ class BaselineRegistry(Registry):
     @classmethod
     def register_env(cls, to_register=None, *, name: Optional[str] = None):
         r"""Register a environment to registry with key 'name'
-            currently only support subclass of RLEnv.
+            Support subclass of RLEnv or Env.
 
         Args:
             name: Key with which the env will be registered.
                 If None will use the name of the class.
 
         """
-        from habitat import RLEnv
+        from habitat import Env, RLEnv
 
-        return cls._register_impl("env", to_register, name, assert_type=RLEnv)
+        def wrap_wrap(to_register):
+            registered = False
+            try:
+                reg = cls._register_impl(
+                    "env", to_register, name, assert_type=Env
+                )
+                registered = True
+            except AssertionError:
+                pass
+
+            try:
+                reg = cls._register_impl(
+                    "env", to_register, name, assert_type=RLEnv
+                )
+                registered = True
+            except AssertionError:
+                pass
+
+            assert (
+                registered
+            ), f"{to_register} must be a subclass of either {Env} or {RLEnv}"
+            return reg
+
+        if to_register is None:
+            return wrap_wrap
+        return wrap_wrap(to_register)
 
     @classmethod
     def get_env(cls, name):

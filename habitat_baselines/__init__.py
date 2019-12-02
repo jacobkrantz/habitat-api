@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from habitat_baselines.common.base_trainer import BaseRLTrainer, BaseTrainer
+from habitat_baselines.il.vln import vln_trainer
 from habitat_baselines.rl.ppo.ppo_trainer import PPOTrainer, RolloutStorage
 from habitat_baselines.rl.vln.ppo.ppo_vln_trainer import PPOVLN_Trainer
 
@@ -14,4 +15,5 @@ __all__ = [
     "PPOTrainer",
     "RolloutStorage",
     "PPOVLN_Trainer",
+    "ILVLN_Trainer",
 ]

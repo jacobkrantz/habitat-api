@@ -71,6 +71,20 @@ _C.RL.PPO.tau = 0.95
 _C.RL.PPO.reward_window_size = 50
 _C.RL.PPO.use_normalized_advantage = True
 # -----------------------------------------------------------------------------
+# IMITATION LEARNING (IL) ENVIRONMENT CONFIG
+# -----------------------------------------------------------------------------
+_C.IL = CN()
+_C.IL.ALGORITHM = (
+    "teacher_forcing"  # either "teacher_forcing" or "student_forcing" for now.
+)
+_C.IL.GT_PATH = "data/datasets/vln/mp3d/r2r/v1/train/train_gt_all.json.gz"
+_C.IL.BATCH_SIZE = (
+    128  # number of steps to collect and backprop in single pass
+)
+_C.IL.lr = 7e-4
+_C.IL.eps = 1e-5
+_C.IL.window_accuracy_size = 100
+# -----------------------------------------------------------------------------
 # VLN CONFIG
 # -----------------------------------------------------------------------------
 _C.RL.VLN = CN()
