@@ -29,7 +29,8 @@ from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
 from habitat_baselines.il.policy import ILAgent, VLNILBaselinePolicy
 from habitat_baselines.il.rollout_storage import (
-    RolloutStorageFixedBatch as RolloutStorage,
+    RolloutStorageEpisodeBased,
+    RolloutStorageFixedBatch,
 )
 from habitat_baselines.rl.vln.ppo.utils import transform_observations
 
@@ -159,7 +160,7 @@ class ILVLN_Trainer(BaseRLTrainer):
                 dtype=np.float32,
             )
 
-        rollouts = RolloutStorage(
+        rollouts = globals()[self.config.IL.ROLLOUT_CLASS](
             self.config.IL.BATCH_SIZE,
             self.envs.num_envs,
             self.envs.observation_spaces[0],
@@ -213,14 +214,9 @@ class ILVLN_Trainer(BaseRLTrainer):
 
         t_env_step = time.time()
         gt_observations = self.envs.step([a.item() for a in gt_actions])
+        env_steps += 1
         t_env += time.time() - t_env_step
 
-        gt_observation_batch = batch_obs(
-            transform_observations(
-                gt_observations,
-                self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
-            )
-        )
         masks = torch.tensor(
             [
                 [0.0] if a == HabitatSimActions.STOP else [1.0]
@@ -236,6 +232,20 @@ class ILVLN_Trainer(BaseRLTrainer):
             dtype=torch.int,
         ).unsqueeze(dim=1)
 
+        # reset envs and observations if necessary
+        t_env_step = time.time()
+        for i in range(self.envs.num_envs):
+            if episodes_over[i]:
+                gt_observations[i] = self.envs.reset_at(i)[0]
+        t_env += time.time() - t_env_step
+
+        gt_observation_batch = batch_obs(
+            transform_observations(
+                gt_observations,
+                self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
+            )
+        )
+
         rollouts.insert(
             gt_observation_batch,
             gt_actions,
@@ -245,13 +255,6 @@ class ILVLN_Trainer(BaseRLTrainer):
             episodes_over,
             actions=agent_actions,
         )
-
-        # reset envs if necessary
-        t_env_step = time.time()
-        for i in range(self.envs.num_envs):
-            if episodes_over[i]:
-                self.envs.reset_at(i)
-        t_env += time.time() - t_env_step
 
         # Compute monitoring stats
         t_rollout = time.time() - t_rollout - t_env
@@ -328,7 +331,6 @@ class ILVLN_Trainer(BaseRLTrainer):
                         t_rollout_single,
                     ) = self._collect_rollout_step(rollouts, env_steps)
 
-                    env_steps += 1
                     count_steps += delta_steps
                     episodes_seen += delta_episodes
                     window_correct_steps.append(matching_actions.clone())
@@ -412,4 +414,5 @@ class ILVLN_Trainer(BaseRLTrainer):
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
             config.freeze()
 
-        logger.info(f"env config: {config}")
+        logger.info("checkpoint_path:", checkpoint_path)
+        # logger.info(f"env config: {config}")

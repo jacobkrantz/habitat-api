@@ -83,22 +83,45 @@ class ILAgent(nn.Module):
         super().__init__()
         self.net = net
         self.optimizer = optim.Adam(net.parameters(), lr=lr, eps=eps)
-        self.device = next(net.parameters()).device
+        # self.device = next(net.parameters()).device
+        # https://pytorch.org/docs/stable/nn.html#torch.nn.CrossEntropyLoss
+        # https://datascience.stackexchange.com/questions/55962/pytorch-doing-a-cross-entropy-loss-when-the-predictions-already-have-probabiliti
+        self.loss_func = nn.CrossEntropyLoss()
 
     def forward(self, *x):
         raise NotImplementedError
+
+    def _compute_loss(self, actions_logits, gt_actions, gradient_weights):
+        r"""Computes the loss of a batch of actions. Scale the gradient
+        sample-wise.
+        https://discuss.pytorch.org/t/how-to-scale-sample-wise-gradients/5203
+        """
+
+        def scale_gradients(logits_batch, gradient_weights):
+            def hook(g):
+                return (
+                    g * gradient_weights
+                )  # [batch x n] element-wise mul [batch x 1]
+
+            logits_batch.register_hook(hook)
+
+        gt_actions = gt_actions.squeeze()
+        scale_gradients(actions_logits, gradient_weights)
+        total_loss = self.loss_func(actions_logits, gt_actions)
+        return total_loss
 
     def update(self, rollouts):
         # Reshaped for a single forward pass for all steps
         (
             obs_batch,
             recurrent_hidden_states_batch,
-            gt_actions_batch,
+            gt_actions_batch,  # [batch x 1]
             prev_gt_actions_batch,
             masks_batch,
             episodes_over,
             old_action_log_probs_batch,
             actions_batch,
+            gradient_weights,
         ) = rollouts.get_batch()
 
         (
@@ -115,11 +138,10 @@ class ILAgent(nn.Module):
         )
 
         self.optimizer.zero_grad()
-        loss_func = nn.CrossEntropyLoss()
 
-        # https://pytorch.org/docs/stable/nn.html#torch.nn.CrossEntropyLoss
-        # https://datascience.stackexchange.com/questions/55962/pytorch-doing-a-cross-entropy-loss-when-the-predictions-already-have-probabiliti
-        total_loss = loss_func(actions_logits, gt_actions_batch)
+        total_loss = self._compute_loss(
+            actions_logits, gt_actions_batch, gradient_weights
+        )
 
         self.before_backward(total_loss)
         total_loss.backward()

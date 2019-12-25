@@ -8,30 +8,76 @@ from abc import ABC, abstractmethod
 
 import torch
 
+from habitat import logger
+
 
 class ILRolloutStorage(ABC):
-    def __init__(self):
+    def __init__(
+        self,
+        num_steps,
+        num_envs,
+        observation_space,
+        action_space,
+        recurrent_hidden_state_size,
+        num_recurrent_layers=1,
+    ):
         super().__init__()
+        self.observations = {}
 
-    @abstractmethod
+        for sensor in observation_space.spaces:
+            self.observations[sensor] = torch.zeros(
+                num_steps + 1,
+                num_envs,
+                *observation_space.spaces[sensor].shape
+            )
+
+        self.recurrent_hidden_states = torch.zeros(
+            num_steps + 1,
+            num_recurrent_layers,
+            num_envs,
+            recurrent_hidden_state_size,
+        )
+
+        self.action_log_probs = torch.zeros(num_steps, num_envs, 1)
+        if action_space.__class__.__name__ == "ActionSpace":
+            action_shape = 1
+        else:
+            action_shape = action_space.shape[0]
+
+        self.actions = torch.zeros(num_steps, num_envs, action_shape)
+        self.gt_actions = torch.zeros(num_steps, num_envs, action_shape)
+        self.prev_gt_actions = torch.zeros(
+            num_steps + 1, num_envs, action_shape
+        )
+        if action_space.__class__.__name__ == "ActionSpace":
+            self.actions = self.actions.long()
+            self.gt_actions = self.gt_actions.long()
+            self.prev_gt_actions = self.prev_gt_actions.long()
+
+        self.masks = torch.ones(num_steps + 1, num_envs, 1)
+        self.episodes_over = torch.zeros(num_steps + 1, num_envs, 1)
+
+        self.num_steps = num_steps
+        self.num_envs = num_envs
+
     def to(self, device):
-        raise NotImplementedError
+        for sensor in self.observations:
+            self.observations[sensor] = self.observations[sensor].to(device)
+
+        self.recurrent_hidden_states = self.recurrent_hidden_states.to(device)
+        self.action_log_probs = self.action_log_probs.to(device)
+        self.actions = self.actions.to(device)
+        self.gt_actions = self.gt_actions.to(device)
+        self.prev_gt_actions = self.prev_gt_actions.to(device)
+        self.masks = self.masks.to(device)
+        self.episodes_over = self.episodes_over.to(device)
 
     @abstractmethod
     def get_forward_pass_data(self, env_steps):
         raise NotImplementedError
 
     @abstractmethod
-    def insert(
-        self,
-        observations,
-        gt_actions,
-        masks,
-        recurrent_hidden_states,
-        action_log_probs,
-        episodes_over,
-        actions=None,
-    ):
+    def insert(self):
         raise NotImplementedError
 
     @abstractmethod
@@ -76,57 +122,16 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         recurrent_hidden_state_size,
         num_recurrent_layers=1,
     ):
-        self.observations = {}
-
-        for sensor in observation_space.spaces:
-            self.observations[sensor] = torch.zeros(
-                num_steps + 1,
-                num_envs,
-                *observation_space.spaces[sensor].shape
-            )
-
-        self.recurrent_hidden_states = torch.zeros(
-            num_steps + 1,
-            num_recurrent_layers,
+        super().__init__(
+            num_steps,
             num_envs,
+            observation_space,
+            action_space,
             recurrent_hidden_state_size,
+            num_recurrent_layers,
         )
-
-        self.action_log_probs = torch.zeros(num_steps, num_envs, 1)
-        if action_space.__class__.__name__ == "ActionSpace":
-            action_shape = 1
-        else:
-            action_shape = action_space.shape[0]
-
-        self.actions = torch.zeros(num_steps, num_envs, action_shape)
-        self.gt_actions = torch.zeros(num_steps, num_envs, action_shape)
-        self.prev_gt_actions = torch.zeros(
-            num_steps + 1, num_envs, action_shape
-        )
-        if action_space.__class__.__name__ == "ActionSpace":
-            self.actions = self.actions.long()
-            self.gt_actions = self.gt_actions.long()
-            self.prev_gt_actions = self.prev_gt_actions.long()
-
-        self.masks = torch.ones(num_steps + 1, num_envs, 1)
-        self.episodes_over = torch.zeros(num_steps + 1, num_envs, 1)
-
-        self.num_steps = num_steps
-        self.num_envs = num_envs
         self.step = 0
         self.just_reset = True  # to know that storage is initially not full
-
-    def to(self, device):
-        for sensor in self.observations:
-            self.observations[sensor] = self.observations[sensor].to(device)
-
-        self.recurrent_hidden_states = self.recurrent_hidden_states.to(device)
-        self.action_log_probs = self.action_log_probs.to(device)
-        self.actions = self.actions.to(device)
-        self.gt_actions = self.gt_actions.to(device)
-        self.prev_gt_actions = self.prev_gt_actions.to(device)
-        self.masks = self.masks.to(device)
-        self.episodes_over = self.episodes_over.to(device)
 
     def get_forward_pass_data(self, env_steps):
         self.just_reset = False
@@ -135,18 +140,14 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
             k: v[self.step] for k, v in self.observations.items()
         }
 
-        recurrent_hidden_states_input = (
-            self.recurrent_hidden_states[self.step].clone().detach()
-        )
+        recurrent_hidden_states_input = self.recurrent_hidden_states[self.step]
+        prev_gt_actions_input = self.prev_gt_actions[self.step]
         for i in range(self.num_envs):
             if self.episodes_over[self.step, i]:
-                recurrent_hidden_states_input[:, :, i] = torch.zeros(
-                    recurrent_hidden_states_input[:, :, i].size()
-                )
+                prev_gt_actions_input[i, 0] = 0
                 self.masks[self.step][i] = 1.0
                 env_steps[i] = 0
 
-        prev_gt_actions_input = self.prev_gt_actions[self.step]
         masks_input = self.masks[self.step]
         return (
             step_observation,
@@ -168,10 +169,19 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
     ):
         r"""TODO: docstring explaining params
         """
+
+        # if an episode is over, re-initialize next episode
+        for i in range(self.num_envs):
+            if episodes_over[i]:
+                recurrent_hidden_states[:, i] = torch.zeros(
+                    recurrent_hidden_states[:, i].size()
+                )
+
         for sensor in observations:
             self.observations[sensor][self.step + 1].copy_(
                 observations[sensor]
             )
+
         self.gt_actions[self.step].copy_(gt_actions)
         self.recurrent_hidden_states[self.step + 1].copy_(
             recurrent_hidden_states
@@ -188,15 +198,6 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         full = self.step == 0 and not self.just_reset
         self.just_reset = True
         return full
-
-    def after_update(self):
-        for sensor in self.observations:
-            self.observations[sensor][0].copy_(self.observations[sensor][-1])
-
-        self.recurrent_hidden_states[0].copy_(self.recurrent_hidden_states[-1])
-        self.prev_gt_actions[0].copy_(self.prev_gt_actions[-1])
-        self.masks[0].copy_(self.masks[-1])
-        self.episodes_over[0].copy_(self.episodes_over[-1])
 
     def get_batch(self):
         r"""
@@ -222,6 +223,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
             episodes_over_batch: [batch x 1]
             action_log_probs_batch: [batch x 1]
             actions_batch: [batch x 1]
+            gradient_weights: [batch x 1]
         """
         T = self.num_steps
         N = self.num_envs
@@ -256,6 +258,10 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         )
         actions_batch = self._flatten_helper(T, N, self.actions)
 
+        # weights to scale the step-wise gradient
+        gradient_weights = torch.ones(episodes_over_batch.size(0), 1).to(
+            self.device
+        )
         return (
             observations_batch,
             recurrent_hidden_states_batch,
@@ -265,4 +271,344 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
             episodes_over_batch,
             action_log_probs_batch,
             actions_batch,
+            gradient_weights,
         )
+
+    def after_update(self):
+        for sensor in self.observations:
+            self.observations[sensor][0].copy_(self.observations[sensor][-1])
+        self.recurrent_hidden_states[0].copy_(self.recurrent_hidden_states[-1])
+        self.prev_gt_actions[0].copy_(self.prev_gt_actions[-1])
+        self.masks[0].copy_(self.masks[-1])
+        self.episodes_over[0].copy_(self.episodes_over[-1])
+
+
+class RolloutStorageEpisodeBased(ILRolloutStorage):
+    r"""Collects a set number of steps, then batches only complete episodes.
+    """
+
+    def __init__(
+        self,
+        num_steps,
+        num_envs,
+        observation_space,
+        action_space,
+        recurrent_hidden_state_size,
+        num_recurrent_layers=1,
+    ):
+        super().__init__(
+            num_steps,
+            num_envs,
+            observation_space,
+            action_space,
+            recurrent_hidden_state_size,
+            num_recurrent_layers,
+        )
+        self.steps = torch.zeros(num_envs, dtype=torch.int)
+        self.pivots = torch.zeros(num_envs, dtype=torch.int) - 1
+        self.just_reset = True
+        self.device = "cpu"
+        self.envs_batch = []
+
+    def to(self, device):
+        super().to(device)
+        self.device = device
+
+    def get_forward_pass_data(self, env_steps):
+        self.just_reset = False
+        step_observation = {
+            k: torch.stack([v[self.steps[i], i] for i in range(self.num_envs)])
+            for k, v in self.observations.items()
+        }
+
+        recurrent_hidden_states_input = torch.stack(
+            [
+                self.recurrent_hidden_states[self.steps[i], :, i]
+                for i in range(self.num_envs)
+            ],
+            dim=1,
+        )
+        prev_gt_actions_input = torch.stack(
+            [
+                self.prev_gt_actions[self.steps[i], i]
+                for i in range(self.num_envs)
+            ]
+        )
+        for i in range(self.num_envs):
+            if self.episodes_over[self.steps[i], i]:
+                self.masks[self.steps[i], i] = 1.0
+                env_steps[i] = 0
+
+        # masks always set to 1.0
+        masks_input = self.masks[0]
+
+        return (
+            step_observation,
+            recurrent_hidden_states_input,
+            prev_gt_actions_input,
+            masks_input,
+            env_steps,
+        )
+
+    def insert(
+        self,
+        observations,
+        gt_actions,
+        masks,
+        recurrent_hidden_states,
+        action_log_probs,
+        episodes_over,
+        actions=None,
+    ):
+        r"""TODO: docstring explaining params
+        """
+        for i in range(self.num_envs):
+            for sensor in observations:
+                self.observations[sensor][self.steps[i] + 1, i].copy_(
+                    observations[sensor][i]
+                )
+
+            # if the episode is over, reset recurrent state for next episode.
+            if episodes_over[i]:
+                recurrent_hidden_states[:, i] = torch.zeros(
+                    recurrent_hidden_states[:, i].size()
+                )
+
+            self.recurrent_hidden_states[self.steps[i] + 1, :, i].copy_(
+                recurrent_hidden_states[:, i]
+            )
+            self.gt_actions[self.steps[i], i].copy_(gt_actions[i])
+            self.actions[self.steps[i], i].copy_(actions[i])
+            self.prev_gt_actions[self.steps[i] + 1, i].copy_(gt_actions[i])
+            self.action_log_probs[self.steps[i], i].copy_(action_log_probs[i])
+            self.masks[self.steps[i] + 1, i].copy_(masks[i])
+            self.episodes_over[self.steps[i] + 1, i].copy_(episodes_over[i])
+        self.steps = (self.steps + 1) % self.num_steps
+
+    def is_full(self):
+        """determine if any of the envs are full"""
+        full = (self.steps == 0).sum().item() > 0 and not self.just_reset
+        self.just_reset = True
+        return full
+
+    def _set_pivot(self):
+        """Find the step index of the last STOP action for each completed
+        episode. This allows us to return a batch of only complete episodes
+        for scaling the loss. Incomplete episodes are saved for the next
+        update. Sets self.pivots to be a list with dim [num_envs]. Only add
+        incomplete envs to batch if it is full.
+        """
+        self.envs_batch = []
+        for i in range(self.num_envs):
+            mat = self.episodes_over[:-1, i, 0].nonzero().int()
+            if mat.size(0):
+                # we need the pivot to be less than the step number
+                if self.steps[i] > 0:
+                    self.pivots[i] = (
+                        ((mat < self.steps[i].to(self.device)).int() * mat)
+                        .max()
+                        .item()
+                    )
+                else:
+                    self.pivots[i] = mat.max().int().item()
+                self.envs_batch.append(i)
+            else:
+                if self.steps[i] == 0:
+                    logger.warn(
+                        "WARNING: Batch does not contain a complete episode."
+                        + " Falling back to processing the batch as a fixed"
+                        + " time horizon."
+                    )
+                    self.pivots[i] = self.num_steps - 1
+                    self.envs_batch.append(i)
+                else:
+                    self.pivots[i] = -1
+
+    def _scale_by_episode(self, episodes_over):
+        r"""Get a weight matrix where each sample is divided by the L1 norm
+        by episode. This way, no episode can be given preferential learning
+        treatment by length. The gradient size is [batch x 4]. Need to return
+        [batch x 1].
+        """
+        episodes_over = episodes_over.squeeze()
+        gradient_weights = torch.ones(episodes_over.size(0), 1).to(self.device)
+        splits = [-1] + list(
+            episodes_over.nonzero().squeeze(dim=1).cpu().numpy()
+        )
+        if splits[-1] != episodes_over.size(0) - 1:
+            splits.append(episodes_over.size(0) - 1)
+
+        for i in range(1, len(splits)):
+            div_by = splits[i] - splits[i - 1]
+            gradient_weights[splits[i - 1] + 1 : splits[i] + 1] /= div_by
+
+        return gradient_weights
+
+    def get_batch(self):
+        r"""
+        start as:
+            self.observations["depth"]: [steps+1 x num_envs x H x W x channels=1]
+            self.observations["instruction"]: [steps+1 x num_envs x 153]
+            self.observations["rgb"]: [steps+1 x num_envs x 224 x 224 x channels=3]
+            self.recurrent_hidden_states: [steps+1 x num_layers x num_envs x hidden_size]
+            self.prev_gt_actions [steps+1 x num_envs x 1]
+            self.gt_actions [steps x num_envs x 1]
+            ...
+
+        Returns:
+            observations_batch: dict of
+                rgb: [batch x H x W x channel]
+                depth: [batch x H x W x channel]
+                instruction: [batch x seq_length]
+            recurrent_hidden_states_batch: [num_layers x batch x hidden_size]
+            gt_actions_batch: [batch]
+            prev_gt_actions_batch: [batch x 1]
+            masks_batch: [batch x 1]
+            episodes_over_batch: [batch x 1]
+            action_log_probs_batch: [batch x 1]
+            actions_batch: [batch x 1]
+            gradient_weights: [batch x 1]
+        """
+        self._set_pivot()
+        self.envs_batch = list(
+            (self.pivots != -1).nonzero().squeeze(dim=1).numpy()
+        )
+
+        observations_batch = {
+            k: torch.cat([v[: self.pivots[i] + 1, i] for i in self.envs_batch])
+            for k, v in self.observations.items()
+        }
+        recurrent_hidden_states_batch = torch.cat(
+            [
+                self.recurrent_hidden_states[: self.pivots[i] + 1, :, i]
+                for i in self.envs_batch
+            ]
+        ).permute(1, 0, 2)
+        gt_actions_batch = torch.cat(
+            [self.gt_actions[: self.pivots[i] + 1, i] for i in self.envs_batch]
+        )
+        prev_gt_actions_batch = torch.cat(
+            [
+                self.prev_gt_actions[: self.pivots[i] + 1, i]
+                for i in self.envs_batch
+            ]
+        )
+        masks_batch = torch.cat(
+            [self.masks[: self.pivots[i] + 1, i] for i in self.envs_batch]
+        )
+        episodes_over_batch = torch.cat(
+            [
+                self.episodes_over[: self.pivots[i] + 1, i]
+                for i in self.envs_batch
+            ]
+        )
+
+        action_log_probs_batch = torch.cat(
+            [
+                self.action_log_probs[: self.pivots[i] + 1, i]
+                for i in self.envs_batch
+            ]
+        )
+        actions_batch = torch.cat(
+            [self.actions[: self.pivots[i] + 1, i] for i in self.envs_batch]
+        )
+
+        gradient_weights = self._scale_by_episode(episodes_over_batch)
+
+        return (
+            observations_batch,
+            recurrent_hidden_states_batch,
+            gt_actions_batch,
+            prev_gt_actions_batch,
+            masks_batch,
+            episodes_over_batch,
+            action_log_probs_batch,
+            actions_batch,
+            gradient_weights,
+        )
+
+    def after_update(self):
+        r"""Shift the data that was not included in the update batch to the
+        front. Update steps for each env. There will always be at least one
+        environment where steps == 0 (full). All environments may have partial
+        episodes that need to be transferred.
+        """
+        assert self.envs_batch, (
+            "self.envs_batch must be set to call `after_update`."
+            + "Call `get_batch` or `set_pivot`."
+        )
+
+        for i in self.envs_batch:
+            # move unfinished episode to front, update step to be just beyond these steps
+            if self.steps[i] == 0:
+                new_step = self.num_steps - self.pivots[i] - 1
+                if new_step != 0:  # a partial ep to transfer
+                    self.gt_actions[:new_step, i].copy_(
+                        self.gt_actions[self.pivots[i] + 1 :, i]
+                    )
+                    self.actions[:new_step, i].copy_(
+                        self.actions[self.pivots[i] + 1 :, i]
+                    )
+                    self.action_log_probs[:new_step, i].copy_(
+                        self.action_log_probs[self.pivots[i] + 1 :, i]
+                    )
+
+                for sensor in self.observations:
+                    self.observations[sensor][: new_step + 1, i].copy_(
+                        self.observations[sensor][self.pivots[i] + 1 :, i]
+                    )
+                self.recurrent_hidden_states[: new_step + 1, :, i].copy_(
+                    self.recurrent_hidden_states[self.pivots[i] + 1 :, :, i]
+                )
+                self.prev_gt_actions[: new_step + 1, i].copy_(
+                    self.prev_gt_actions[self.pivots[i] + 1 :, i]
+                )
+                self.masks[: new_step + 1, i].copy_(
+                    self.masks[self.pivots[i] + 1 :, i]
+                )
+                self.episodes_over[: new_step + 1, i].copy_(
+                    self.episodes_over[self.pivots[i] + 1 :, i]
+                )
+            else:
+                new_step = self.steps[i] - self.pivots[i] - 1
+                if new_step != 0:  # a partial ep to transfer
+                    self.gt_actions[:new_step, i].copy_(
+                        self.gt_actions[self.pivots[i] + 1 : self.steps[i], i]
+                    )
+                    self.actions[:new_step, i].copy_(
+                        self.actions[self.pivots[i] + 1 : self.steps[i], i]
+                    )
+                    self.action_log_probs[:new_step, i].copy_(
+                        self.action_log_probs[
+                            self.pivots[i] + 1 : self.steps[i], i
+                        ]
+                    )
+
+                for sensor in self.observations:
+                    self.observations[sensor][: new_step + 1, i].copy_(
+                        self.observations[sensor][
+                            self.pivots[i] + 1 : self.steps[i] + 1, i
+                        ]
+                    )
+                self.recurrent_hidden_states[: new_step + 1, :, i].copy_(
+                    self.recurrent_hidden_states[
+                        self.pivots[i] + 1 : self.steps[i] + 1, :, i
+                    ]
+                )
+                self.prev_gt_actions[: new_step + 1, i].copy_(
+                    self.prev_gt_actions[
+                        self.pivots[i] + 1 : self.steps[i] + 1, i
+                    ]
+                )
+                self.masks[: new_step + 1, i].copy_(
+                    self.masks[self.pivots[i] + 1 : self.steps[i] + 1, i]
+                )
+                self.episodes_over[: new_step + 1, i].copy_(
+                    self.episodes_over[
+                        self.pivots[i] + 1 : self.steps[i] + 1, i
+                    ]
+                )
+
+            self.steps[i] = new_step
+
+        self.pivots = torch.zeros(self.num_envs, dtype=torch.int) - 1

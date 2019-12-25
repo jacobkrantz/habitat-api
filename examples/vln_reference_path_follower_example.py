@@ -10,15 +10,13 @@ import shutil
 import numpy as np
 
 import habitat
-from examples.shortest_path_follower_example import (
-    SimpleRLEnv,
-    draw_top_down_map,
-)
 from habitat.tasks.nav.shortest_path_follower import ShortestPathFollower
 from habitat.utils.visualizations.utils import (
     append_text_to_image,
     images_to_video,
 )
+
+from .shortest_path_follower_example import SimpleRLEnv, draw_top_down_map
 
 IMAGE_DIR = os.path.join("examples", "images")
 if not os.path.exists(IMAGE_DIR):

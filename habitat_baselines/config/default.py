@@ -81,6 +81,9 @@ _C.IL.GT_PATH = "data/datasets/vln/mp3d/r2r/v1/train/train_gt_all.json.gz"
 _C.IL.BATCH_SIZE = (
     128  # number of steps to collect and backprop in single pass
 )
+_C.IL.ROLLOUT_CLASS = (
+    "RolloutStorageFixedBatch"  # or RolloutStorageEpisodeBased
+)
 _C.IL.lr = 7e-4
 _C.IL.eps = 1e-5
 _C.IL.window_accuracy_size = 100
