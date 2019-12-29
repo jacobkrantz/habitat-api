@@ -9,6 +9,7 @@ import json
 import os
 import time
 from collections import deque
+import time
 from typing import Dict, List
 
 import numpy as np
@@ -16,7 +17,7 @@ import torch
 from gym import spaces
 from torch.optim.lr_scheduler import LambdaLR
 
-from habitat import Config, Env, logger
+from habitat import Config, logger
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.utils.visualizations.utils import (
     append_text_to_image,
@@ -34,7 +35,8 @@ from habitat_baselines.il.rollout_storage import (
 )
 from habitat_baselines.rl.vln.ppo.utils import transform_observations
 
-from habitat_baselines.common.utils import (  # generate_video,; linear_decay,
+from habitat_baselines.common.utils import (  # linear_decay,
+    generate_video,
     batch_obs,
 )
 
@@ -284,8 +286,6 @@ class ILVLN_Trainer(BaseRLTrainer):
         Returns:
             None
         """
-        import sys
-
         self.envs = construct_envs_auto_reset_false(
             self.config, get_env_class(self.config.ENV_NAME)
         )
@@ -378,13 +378,47 @@ class ILVLN_Trainer(BaseRLTrainer):
 
         self.envs.close()
 
+    @staticmethod
+    def _pause_envs(
+        envs_to_pause,
+        envs,
+        test_recurrent_hidden_states,
+        not_done_masks,
+        prev_actions,
+        batch,
+    ):
+        # pausing self.envs with no new episode
+        if len(envs_to_pause) > 0:
+            state_index = list(range(envs.num_envs))
+            for idx in reversed(envs_to_pause):
+                state_index.pop(idx)
+                envs.pause_at(idx)
+
+            # indexing along the batch dimensions
+            test_recurrent_hidden_states = test_recurrent_hidden_states[
+                :, state_index
+            ]
+            not_done_masks = not_done_masks[state_index]
+            prev_actions = prev_actions[state_index]
+
+            for k, v in batch.items():
+                batch[k] = v[state_index]
+
+        return (
+            envs,
+            test_recurrent_hidden_states,
+            not_done_masks,
+            prev_actions,
+            batch,
+        )
+
     def _eval_checkpoint(
         self,
         checkpoint_path: str,
         writer: TensorboardWriter,
         checkpoint_index: int = 0,
     ) -> None:
-        r"""Evaluates a single checkpoint.
+        r"""Evaluates a single checkpoint. Assumes episode IDs are unique.
 
         Args:
             checkpoint_path: path of checkpoint
@@ -394,6 +428,7 @@ class ILVLN_Trainer(BaseRLTrainer):
         Returns:
             None
         """
+        logger.info(f"checkpoint_path: {checkpoint_path}")
         # Map location CPU is almost always better than mapping to a CUDA device.
         ckpt_dict = self.load_checkpoint(checkpoint_path, map_location="cpu")
 
@@ -401,8 +436,6 @@ class ILVLN_Trainer(BaseRLTrainer):
             config = self._setup_eval_config(ckpt_dict["config"])
         else:
             config = self.config.clone()
-
-        ppo_cfg = config.RL.PPO
 
         config.defrost()
         config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
@@ -414,5 +447,165 @@ class ILVLN_Trainer(BaseRLTrainer):
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
             config.freeze()
 
-        logger.info("checkpoint_path:", checkpoint_path)
-        # logger.info(f"env config: {config}")
+        # setup agent
+        self.envs = construct_envs_auto_reset_false(
+            config, get_env_class(config.ENV_NAME)
+        )
+        self.device = (
+            torch.device("cuda", config.TORCH_GPU_ID)
+            if torch.cuda.is_available()
+            else torch.device("cpu")
+        )
+
+        self._setup_agent(config.RL.VLN)
+        self.agent.load_state_dict(ckpt_dict["state_dict"])
+
+        observations = self.envs.reset()
+        observations = transform_observations(
+            observations, self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID
+        )
+        batch = batch_obs(observations, self.device)
+
+        eval_recurrent_hidden_states = torch.zeros(
+            1,  # num_recurrent_layers
+            self.config.NUM_PROCESSES,
+            self.config.RL.VLN.STATE_ENCODER.hidden_size,
+            device=self.device,
+        )
+        prev_actions = torch.zeros(
+            self.config.NUM_PROCESSES, 1, device=self.device, dtype=torch.long
+        )
+        not_done_masks = torch.zeros(
+            self.config.NUM_PROCESSES, 1, device=self.device
+        )
+        stats_episodes = {}  # dict of dicts that stores stats per episode
+
+        if len(self.config.VIDEO_OPTION) > 0:
+            os.makedirs(self.config.VIDEO_DIR, exist_ok=True)
+            rgb_frames = [[] for _ in range(self.config.NUM_PROCESSES)]
+
+        # loop for each step to cover all test episodes
+        while (
+            self.envs.num_envs
+            > 0
+            # and len(stats_episodes) < self.config.TEST_EPISODE_COUNT
+        ):
+            current_episodes = self.envs.current_episodes()
+
+            with torch.no_grad():
+                (
+                    actions,
+                    _,
+                    eval_recurrent_hidden_states,
+                ) = self.agent.net.act(
+                    batch,
+                    eval_recurrent_hidden_states,
+                    prev_actions,
+                    not_done_masks,
+                    deterministic=True,
+                )
+                prev_actions.copy_(actions)
+
+            observations = self.envs.step([a.item() for a in actions])
+            episodes_over = torch.tensor(
+                [
+                    int(self.envs.call_at(i, "get_episode_over"))
+                    for i in range(self.envs.num_envs)
+                ],
+                dtype=torch.int,
+            )
+            # thanks to these masks, we don't need to reset the RNN state
+            not_done_masks = episodes_over.clone().float().to(self.device)
+            not_done_masks[episodes_over == 1] = 0
+            not_done_masks[episodes_over == 0] = 1
+
+            # reset envs and observations if necessary
+            for i in range(self.envs.num_envs):
+                if len(self.config.VIDEO_OPTION) > 0:
+                    frame = observations_to_image(
+                        observations[i], self.envs.call_at(i, "get_metrics")
+                    )
+                    frame = append_text_to_image(
+                        frame, current_episodes[i].instruction.instruction_text
+                    )
+                    rgb_frames[i].append(frame)
+
+                if not episodes_over[i]:
+                    continue
+
+                stats_episodes[
+                    current_episodes[i].episode_id
+                ] = self.envs.call_at(i, "get_metrics")
+                observations[i] = self.envs.reset_at(i)[0]
+                prev_actions[i] = torch.zeros(1, dtype=torch.long)
+
+                if len(self.config.VIDEO_OPTION) > 0:
+                    generate_video(
+                        video_option=self.config.VIDEO_OPTION,
+                        video_dir=self.config.VIDEO_DIR,
+                        images=rgb_frames[i],
+                        episode_id=current_episodes[i].episode_id,
+                        checkpoint_idx=checkpoint_index,
+                        metric_name="SPL",
+                        metric_value=round(
+                            stats_episodes[current_episodes[i].episode_id][
+                                "spl"
+                            ],
+                            6,
+                        ),
+                        tb_writer=writer,
+                    )
+
+                    del stats_episodes[current_episodes[i].episode_id][
+                        "top_down_map"
+                    ]
+                    del stats_episodes[current_episodes[i].episode_id][
+                        "collisions"
+                    ]
+                    rgb_frames[i] = []
+
+            observations = transform_observations(
+                observations,
+                self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
+            )
+            batch = batch_obs(observations, self.device)
+
+            envs_to_pause = []
+            next_episodes = self.envs.current_episodes()
+
+            for i in range(self.envs.num_envs):
+                if next_episodes[i].episode_id in stats_episodes:
+                    envs_to_pause.append(i)
+
+            (
+                self.envs,
+                eval_recurrent_hidden_states,
+                not_done_masks,
+                prev_actions,
+                batch,
+            ) = self._pause_envs(
+                envs_to_pause,
+                self.envs,
+                eval_recurrent_hidden_states,
+                not_done_masks,
+                prev_actions,
+                batch,
+            )
+
+        self.envs.close()
+
+        split = config.TASK_CONFIG.DATASET.SPLIT
+        with open(f"stats_episodes_{split}.json", "w") as f:
+            json.dump(stats_episodes, f, indent=4)
+
+        time.sleep(5)
+        aggregated_stats = {}
+        num_episodes = len(stats_episodes)
+        for stat_key in next(iter(stats_episodes.values())).keys():
+            aggregated_stats[stat_key] = (
+                sum([v[stat_key] for v in stats_episodes.values()])
+                / num_episodes
+            )
+
+        for k, v in aggregated_stats.items():
+            logger.info(f"Average episode {k}: {v:.6f}")

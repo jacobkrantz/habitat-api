@@ -3,7 +3,7 @@ import json
 import torch
 import torch.nn as nn
 
-from habitat import Config
+from habitat import Config, logger
 from habitat_baselines.rl.models.rnn_state_encoder import RNNStateEncoder
 
 
@@ -59,11 +59,13 @@ class InstructionEncoder(nn.Module):
         Returns:
             embeddings tensor of size [num_words x embedding_dim]
         """
-        print("\nLoading word embeddings...")
+        logger.info("\nLoading word embeddings...")
         with open(self.config.embedding_file, "r") as f:
             embeddings = torch.tensor(json.load(f))
 
-        print(f"Done loading word embeddings. Dim: {embeddings.size()}.\n")
+        logger.info(
+            f"Done loading word embeddings. Dim: {embeddings.size()}.\n"
+        )
         return embeddings
 
     def forward(self, observations):
