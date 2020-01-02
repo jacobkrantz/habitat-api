@@ -82,8 +82,9 @@ _C.IL.BATCH_SIZE = (
     128  # number of steps to collect and backprop in single pass
 )
 _C.IL.ROLLOUT_CLASS = (
-    "RolloutStorageFixedBatch"  # or RolloutStorageEpisodeBased
+    "RolloutStorageEpisodeBased"  # or RolloutStorageFixedBatch
 )
+_C.IL.LOSS_SCALING = "NONE"  # INFLECTION, TRAJECTORY, or NONE
 _C.IL.lr = 7e-4
 _C.IL.eps = 1e-5
 _C.IL.window_accuracy_size = 100

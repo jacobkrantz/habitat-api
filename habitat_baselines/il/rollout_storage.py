@@ -18,6 +18,7 @@ class ILRolloutStorage(ABC):
         num_envs,
         observation_space,
         action_space,
+        loss_scaling,
         recurrent_hidden_state_size,
         num_recurrent_layers=1,
     ):
@@ -57,6 +58,7 @@ class ILRolloutStorage(ABC):
         self.masks = torch.ones(num_steps + 1, num_envs, 1)
         self.episodes_over = torch.zeros(num_steps + 1, num_envs, 1)
 
+        self.loss_scaling = loss_scaling
         self.num_steps = num_steps
         self.num_envs = num_envs
 
@@ -223,7 +225,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
             episodes_over_batch: [batch x 1]
             action_log_probs_batch: [batch x 1]
             actions_batch: [batch x 1]
-            gradient_weights: [batch x 1]
+            loss_weights: [batch]
         """
         T = self.num_steps
         N = self.num_envs
@@ -259,9 +261,9 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         actions_batch = self._flatten_helper(T, N, self.actions)
 
         # weights to scale the step-wise gradient
-        gradient_weights = torch.ones(episodes_over_batch.size(0), 1).to(
+        loss_weights = torch.ones(episodes_over_batch.size(0)).to(
             self.device
-        )
+        ) / float(episodes_over_batch.size(0))
         return (
             observations_batch,
             recurrent_hidden_states_batch,
@@ -271,7 +273,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
             episodes_over_batch,
             action_log_probs_batch,
             actions_batch,
-            gradient_weights,
+            loss_weights,
         )
 
     def after_update(self):
@@ -424,14 +426,15 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
                 else:
                     self.pivots[i] = -1
 
-    def _scale_by_episode(self, episodes_over):
-        r"""Get a weight matrix where each sample is divided by the L1 norm
-        by episode. This way, no episode can be given preferential learning
-        treatment by length. The gradient size is [batch x 4]. Need to return
-        [batch x 1].
+    def _scale_by_trajectory(self, episodes_over):
+        r"""Compute a weight matrix where each sample is divided by the
+        trajectory L1 norm. This way, no episode can be given preferential
+        learning treatment by length. The gradient size is [batch x 4].
+        Returns:
+            loss_weights. Size: [batch]
         """
         episodes_over = episodes_over.squeeze()
-        gradient_weights = torch.ones(episodes_over.size(0), 1).to(self.device)
+        loss_weights = torch.ones(episodes_over.size(0)).to(self.device)
         splits = [-1] + list(
             episodes_over.nonzero().squeeze(dim=1).cpu().numpy()
         )
@@ -440,9 +443,43 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
 
         for i in range(1, len(splits)):
             div_by = splits[i] - splits[i - 1]
-            gradient_weights[splits[i - 1] + 1 : splits[i] + 1] /= div_by
+            loss_weights[splits[i - 1] + 1 : splits[i] + 1] /= div_by
 
-        return gradient_weights
+        return loss_weights
+
+    def _get_inflection_weights(self, gt_actions, episodes_over):
+        r"""Compute the inflection weights [Wijmans et al]. Note that in our
+        setting we are batching trajectories together yet still using
+        trajectory-based normalization. All normalization of the inflection
+        weighting loss is done in the weight coefficients here. Inflection
+        frequency was calculated from the training set as (number of actions)
+        / (number of inflection points). Paper link: https://bit.ly/2suE8oZ
+        Args:
+            gt_actions: size [batch]
+            episodes_over: size [batch x 1]
+        Returns:
+            inflection_weights: size [batch]
+        """
+        INFLECTION_FREQ = 3.2
+
+        inflection_weights = torch.ones(gt_actions.size(0), dtype=torch.float)
+        inflection_weights[0] = INFLECTION_FREQ
+        for i in range(1, len(gt_actions)):
+            if gt_actions[i] != gt_actions[i - 1]:
+                inflection_weights[i] = INFLECTION_FREQ
+
+        splits = [0] + list(
+            episodes_over.squeeze().nonzero().squeeze(dim=1).cpu().numpy() + 1
+        )
+
+        if splits[-1] != episodes_over.size(0):
+            splits.append(episodes_over.size(0))
+
+        for i in range(1, len(splits)):
+            inflection_weights[splits[i - 1] : splits[i]] /= torch.sum(
+                inflection_weights[splits[i - 1] : splits[i]]
+            )
+        return inflection_weights
 
     def get_batch(self):
         r"""
@@ -467,7 +504,7 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
             episodes_over_batch: [batch x 1]
             action_log_probs_batch: [batch x 1]
             actions_batch: [batch x 1]
-            gradient_weights: [batch x 1]
+            loss_weights: [batch]
         """
         self._set_pivot()
         self.envs_batch = list(
@@ -486,7 +523,7 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
         ).permute(1, 0, 2)
         gt_actions_batch = torch.cat(
             [self.gt_actions[: self.pivots[i] + 1, i] for i in self.envs_batch]
-        )
+        ).squeeze()
         prev_gt_actions_batch = torch.cat(
             [
                 self.prev_gt_actions[: self.pivots[i] + 1, i]
@@ -513,7 +550,22 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
             [self.actions[: self.pivots[i] + 1, i] for i in self.envs_batch]
         )
 
-        gradient_weights = self._scale_by_episode(episodes_over_batch)
+        # weights to scale the step-wise loss
+        if self.loss_scaling == "TRAJECTORY":
+            loss_weights = self._scale_by_trajectory(episodes_over_batch)
+        elif self.loss_scaling == "INFLECTION":
+            loss_weights = self._get_inflection_weights(
+                gt_actions_batch, episodes_over_batch
+            )
+        elif self.loss_scaling == "NONE":
+            loss_weights = torch.ones(episodes_over_batch.size(0)) / float(
+                gt_actions_batch.size(0)
+            )
+        else:
+            raise ValueError(
+                "IL.LOSS_SCALING must be one of [TRAJECTORY, INFLECTION, NONE]."
+            )
+        loss_weights = loss_weights.to(self.device)
 
         return (
             observations_batch,
@@ -524,7 +576,7 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
             episodes_over_batch,
             action_log_probs_batch,
             actions_batch,
-            gradient_weights,
+            loss_weights,
         )
 
     def after_update(self):

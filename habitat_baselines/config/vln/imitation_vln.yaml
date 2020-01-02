@@ -6,7 +6,7 @@ TORCH_GPU_ID: 1
 VIDEO_OPTION: ["disk", "tensorboard"]
 TENSORBOARD_DIR: tensorboard_dirs/debug/debug
 VIDEO_DIR: "videos/debug"
-# TEST_EPISODE_COUNT: 10
+TEST_EPISODE_COUNT: 10
 EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/debug/debug"
 NUM_PROCESSES: 1
 SENSORS: ["RGB_SENSOR", "DEPTH_SENSOR"]
@@ -21,7 +21,8 @@ EVAL:
 IL:
   GT_PATH: "data/datasets/vln/mp3d/r2r/v1/preprocessed/{split}/{split}_gt_all.json.gz"
   BATCH_SIZE: 128
-  ROLLOUT_CLASS: "RolloutStorageEpisodeBased"  # RolloutStorageEpisodeBased or RolloutStorageFixedBatch
+  ROLLOUT_CLASS: "RolloutStorageEpisodeBased"
+  LOSS_SCALING: "INFLECTION"  # INFLECTION, TRAJECTORY, or NONE
   lr: 2.5e-4
   eps: 1e-5
   window_accuracy_size: 500

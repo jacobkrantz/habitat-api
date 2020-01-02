@@ -87,6 +87,7 @@ class ILAgent(nn.Module):
         # https://pytorch.org/docs/stable/nn.html#torch.nn.CrossEntropyLoss
         # https://datascience.stackexchange.com/questions/55962/pytorch-doing-a-cross-entropy-loss-when-the-predictions-already-have-probabiliti
         self.loss_func = nn.CrossEntropyLoss()
+        self.log_softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, *x):
         raise NotImplementedError
@@ -95,6 +96,8 @@ class ILAgent(nn.Module):
         r"""Computes the loss of a batch of actions. Scale the gradient
         sample-wise.
         https://discuss.pytorch.org/t/how-to-scale-sample-wise-gradients/5203
+        Ahh! Wrong!! This is scaling by batch then scaling by episode, so it
+        does not scale purely by episode. Use scaled_cross_entropy_loss instead
         """
 
         def scale_gradients(logits_batch, gradient_weights):
@@ -105,23 +108,36 @@ class ILAgent(nn.Module):
 
             logits_batch.register_hook(hook)
 
-        gt_actions = gt_actions.squeeze()
         scale_gradients(actions_logits, gradient_weights)
         total_loss = self.loss_func(actions_logits, gt_actions)
         return total_loss
+
+    def scaled_cross_entropy_loss(self, logits, labels, sample_weights):
+        """ Cross Entropy loss with a flexible sample-wise scaling.
+        Args:
+            logits: Size: [batch x num_classes]. Type: torch.float
+            labels: Indices of correct output. Size: [batch]. Type: torch.float
+            sample_weights: Scales loss sample-wise. All loss normalization
+            must be done in sample_weights. Size: [batch]. Type: torch.float
+        """
+        batch_size = logits.size(0)
+        probs = self.log_softmax(logits)
+        neg_log_likelihoods = -probs[range(batch_size), labels]
+        scaled_likelihoods = sample_weights * neg_log_likelihoods
+        return torch.sum(scaled_likelihoods)
 
     def update(self, rollouts):
         # Reshaped for a single forward pass for all steps
         (
             obs_batch,
             recurrent_hidden_states_batch,
-            gt_actions_batch,  # [batch x 1]
+            gt_actions_batch,  # [batch]
             prev_gt_actions_batch,
             masks_batch,
             episodes_over,
             old_action_log_probs_batch,
             actions_batch,
-            gradient_weights,
+            loss_weights,
         ) = rollouts.get_batch()
 
         (
@@ -139,8 +155,8 @@ class ILAgent(nn.Module):
 
         self.optimizer.zero_grad()
 
-        total_loss = self._compute_loss(
-            actions_logits, gt_actions_batch, gradient_weights
+        total_loss = self.scaled_cross_entropy_loss(
+            actions_logits, gt_actions_batch, loss_weights
         )
 
         self.before_backward(total_loss)

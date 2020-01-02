@@ -167,6 +167,7 @@ class ILVLN_Trainer(BaseRLTrainer):
             self.envs.num_envs,
             self.envs.observation_spaces[0],
             self.envs.action_spaces[0],
+            self.config.IL.LOSS_SCALING,
             self.config.RL.VLN.STATE_ENCODER.hidden_size,
         )
         rollouts.to(self.device)
