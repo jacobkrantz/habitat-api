@@ -3,27 +3,28 @@ TRAINER_NAME: "imitation_vln"
 ENV_NAME: "VLNILEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID: 1
-VIDEO_OPTION: ["disk", "tensorboard"]
-TENSORBOARD_DIR: tensorboard_dirs/debug/debug
+VIDEO_OPTION: []  # ["disk", "tensorboard"]
+TENSORBOARD_DIR: tensorboard_dirs/debug
 VIDEO_DIR: "videos/debug"
 TEST_EPISODE_COUNT: 10
-EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/debug/debug"
+EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/debug"  # if file, eval just that checkpoint.
 NUM_PROCESSES: 1
 SENSORS: ["RGB_SENSOR", "DEPTH_SENSOR"]
-CHECKPOINT_FOLDER: "data/checkpoints/vln/debug/debug"
-NUM_UPDATES: 1000000
+CHECKPOINT_FOLDER: "data/checkpoints/vln/debug"
+NUM_UPDATES: 100000
 LOG_INTERVAL: 10
-CHECKPOINT_INTERVAL: 100
+CHECKPOINT_INTERVAL: 200
 EVAL:
   USE_CKPT_CONFIG: False
-  SPLIT: train
+  SPLIT: val_seen
 
 IL:
   GT_PATH: "data/datasets/vln/mp3d/r2r/v1/preprocessed/{split}/{split}_gt_all.json.gz"
-  BATCH_SIZE: 128
+  BUFFER_SIZE: 200
+  ALGORITHM: "TEACHER_FORCING"  # WIP: STUDENT_FORCING
   ROLLOUT_CLASS: "RolloutStorageEpisodeBased"
   LOSS_SCALING: "INFLECTION"  # INFLECTION, TRAJECTORY, or NONE
-  lr: 2.5e-4
+  lr: 5e-4  # 2.5e-4
   eps: 1e-5
   window_accuracy_size: 500
 

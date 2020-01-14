@@ -75,11 +75,11 @@ _C.RL.PPO.use_normalized_advantage = True
 # -----------------------------------------------------------------------------
 _C.IL = CN()
 _C.IL.ALGORITHM = (
-    "teacher_forcing"  # either "teacher_forcing" or "student_forcing" for now.
+    "TEACHER_FORCING"  # either "TEACHER_FORCING" or "STUDENT_FORCING"
 )
 _C.IL.GT_PATH = "data/datasets/vln/mp3d/r2r/v1/train/train_gt_all.json.gz"
-_C.IL.BATCH_SIZE = (
-    128  # number of steps to collect and backprop in single pass
+_C.IL.BUFFER_SIZE = (
+    128  # max number of steps to hold for each environment in rollout storage
 )
 _C.IL.ROLLOUT_CLASS = (
     "RolloutStorageEpisodeBased"  # or RolloutStorageFixedBatch

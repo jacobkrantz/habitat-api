@@ -19,11 +19,21 @@ class ILRolloutStorage(ABC):
         observation_space,
         action_space,
         loss_scaling,
+        il_algorithm,
         recurrent_hidden_state_size,
         num_recurrent_layers=1,
     ):
         super().__init__()
         self.observations = {}
+        assert loss_scaling in [
+            "TRAJECTORY",
+            "INFLECTION",
+            "NONE",
+        ], "LOSS_SCALING must be one of [TRAJECTORY, INFLECTION, NONE]."
+        assert il_algorithm in [
+            "TEACHER_FORCING",
+            "STUDENT_FORCING",
+        ], "IL.ALGORITHM must be either `TEACHER_FORCING` or `STUDENT_FORCING`"
 
         for sensor in observation_space.spaces:
             self.observations[sensor] = torch.zeros(
@@ -47,18 +57,17 @@ class ILRolloutStorage(ABC):
 
         self.actions = torch.zeros(num_steps, num_envs, action_shape)
         self.gt_actions = torch.zeros(num_steps, num_envs, action_shape)
-        self.prev_gt_actions = torch.zeros(
-            num_steps + 1, num_envs, action_shape
-        )
+        self.prev_actions = torch.zeros(num_steps + 1, num_envs, action_shape)
         if action_space.__class__.__name__ == "ActionSpace":
             self.actions = self.actions.long()
             self.gt_actions = self.gt_actions.long()
-            self.prev_gt_actions = self.prev_gt_actions.long()
+            self.prev_actions = self.prev_actions.long()
 
         self.masks = torch.ones(num_steps + 1, num_envs, 1)
         self.episodes_over = torch.zeros(num_steps + 1, num_envs, 1)
 
         self.loss_scaling = loss_scaling
+        self.il_algorithm = il_algorithm
         self.num_steps = num_steps
         self.num_envs = num_envs
 
@@ -70,7 +79,7 @@ class ILRolloutStorage(ABC):
         self.action_log_probs = self.action_log_probs.to(device)
         self.actions = self.actions.to(device)
         self.gt_actions = self.gt_actions.to(device)
-        self.prev_gt_actions = self.prev_gt_actions.to(device)
+        self.prev_actions = self.prev_actions.to(device)
         self.masks = self.masks.to(device)
         self.episodes_over = self.episodes_over.to(device)
 
@@ -121,6 +130,8 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         num_envs,
         observation_space,
         action_space,
+        loss_scaling,
+        il_algorithm,
         recurrent_hidden_state_size,
         num_recurrent_layers=1,
     ):
@@ -129,6 +140,8 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
             num_envs,
             observation_space,
             action_space,
+            loss_scaling,
+            il_algorithm,
             recurrent_hidden_state_size,
             num_recurrent_layers,
         )
@@ -143,10 +156,10 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         }
 
         recurrent_hidden_states_input = self.recurrent_hidden_states[self.step]
-        prev_gt_actions_input = self.prev_gt_actions[self.step]
+        prev_actions_input = self.prev_actions[self.step]
         for i in range(self.num_envs):
             if self.episodes_over[self.step, i]:
-                prev_gt_actions_input[i, 0] = 0
+                prev_actions_input[i, 0] = 0
                 self.masks[self.step][i] = 1.0
                 env_steps[i] = 0
 
@@ -154,7 +167,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         return (
             step_observation,
             recurrent_hidden_states_input,
-            prev_gt_actions_input,
+            prev_actions_input,
             masks_input,
             env_steps,
         )
@@ -167,7 +180,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         recurrent_hidden_states,
         action_log_probs,
         episodes_over,
-        actions=None,
+        actions,
     ):
         r"""TODO: docstring explaining params
         """
@@ -189,7 +202,11 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
             recurrent_hidden_states
         )
         self.actions[self.step].copy_(actions)
-        self.prev_gt_actions[self.step + 1].copy_(gt_actions)
+        self.prev_actions[self.step + 1].copy_(gt_actions)
+        if self.il_algorithm == "TEACHER_FORCING":
+            self.prev_actions[self.step + 1].copy_(gt_actions)
+        else:
+            self.prev_actions[self.step + 1].copy_(actions)
         self.action_log_probs[self.step].copy_(action_log_probs)
         self.masks[self.step + 1].copy_(masks)
         self.episodes_over[self.step + 1].copy_(episodes_over)
@@ -210,7 +227,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
             self.recurrent_hidden_states: [steps+1 x num_layers x num_envs x hidden_size]
             self.masks: [steps+1 x num_envs x 1]
             self.episodes_over: [steps+1 x num_envs x 1]
-            self.prev_gt_actions [steps+1 x num_envs x 1]
+            self.prev_actions [steps+1 x num_envs x 1]
             self.gt_actions [steps x num_envs x 1]
 
         Returns:
@@ -220,7 +237,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
                 instruction: [batch x seq_length]
             recurrent_hidden_states_batch: [num_layers x batch x hidden_size]
             gt_actions_batch: [batch]
-            prev_gt_actions_batch: [batch x 1]
+            prev_actions_batch: [batch x 1]
             masks_batch: [batch x 1]
             episodes_over_batch: [batch x 1]
             action_log_probs_batch: [batch x 1]
@@ -234,7 +251,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         # same variables to be reset specifically with after_update()
         observations_batch = {k: v[:-1] for k, v in self.observations.items()}
         recurrent_hidden_states_batch = self.recurrent_hidden_states[:-1]
-        prev_gt_actions_batch = self.prev_gt_actions[:-1]
+        prev_actions_batch = self.prev_actions[:-1]
         masks_batch = self.masks[:-1]
         episodes_over_batch = self.episodes_over[:-1]
 
@@ -250,9 +267,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         gt_actions_batch = (
             self._flatten_helper(T, N, self.gt_actions).squeeze().long()
         )
-        prev_gt_actions_batch = self._flatten_helper(
-            T, N, prev_gt_actions_batch
-        )
+        prev_actions_batch = self._flatten_helper(T, N, prev_actions_batch)
         masks_batch = self._flatten_helper(T, N, masks_batch)
         episodes_over_batch = self._flatten_helper(T, N, episodes_over_batch)
         action_log_probs_batch = self._flatten_helper(
@@ -268,7 +283,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
             observations_batch,
             recurrent_hidden_states_batch,
             gt_actions_batch,
-            prev_gt_actions_batch,
+            prev_actions_batch,
             masks_batch,
             episodes_over_batch,
             action_log_probs_batch,
@@ -280,7 +295,7 @@ class RolloutStorageFixedBatch(ILRolloutStorage):
         for sensor in self.observations:
             self.observations[sensor][0].copy_(self.observations[sensor][-1])
         self.recurrent_hidden_states[0].copy_(self.recurrent_hidden_states[-1])
-        self.prev_gt_actions[0].copy_(self.prev_gt_actions[-1])
+        self.prev_actions[0].copy_(self.prev_actions[-1])
         self.masks[0].copy_(self.masks[-1])
         self.episodes_over[0].copy_(self.episodes_over[-1])
 
@@ -295,6 +310,8 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
         num_envs,
         observation_space,
         action_space,
+        loss_scaling,
+        il_algorithm,
         recurrent_hidden_state_size,
         num_recurrent_layers=1,
     ):
@@ -303,6 +320,8 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
             num_envs,
             observation_space,
             action_space,
+            loss_scaling,
+            il_algorithm,
             recurrent_hidden_state_size,
             num_recurrent_layers,
         )
@@ -330,11 +349,8 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
             ],
             dim=1,
         )
-        prev_gt_actions_input = torch.stack(
-            [
-                self.prev_gt_actions[self.steps[i], i]
-                for i in range(self.num_envs)
-            ]
+        prev_actions_input = torch.stack(
+            [self.prev_actions[self.steps[i], i] for i in range(self.num_envs)]
         )
         for i in range(self.num_envs):
             if self.episodes_over[self.steps[i], i]:
@@ -347,7 +363,7 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
         return (
             step_observation,
             recurrent_hidden_states_input,
-            prev_gt_actions_input,
+            prev_actions_input,
             masks_input,
             env_steps,
         )
@@ -360,7 +376,7 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
         recurrent_hidden_states,
         action_log_probs,
         episodes_over,
-        actions=None,
+        actions,
     ):
         r"""TODO: docstring explaining params
         """
@@ -381,7 +397,10 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
             )
             self.gt_actions[self.steps[i], i].copy_(gt_actions[i])
             self.actions[self.steps[i], i].copy_(actions[i])
-            self.prev_gt_actions[self.steps[i] + 1, i].copy_(gt_actions[i])
+            if self.il_algorithm == "TEACHER_FORCING":
+                self.prev_actions[self.steps[i] + 1, i].copy_(gt_actions[i])
+            else:
+                self.prev_actions[self.steps[i] + 1, i].copy_(actions[i])
             self.action_log_probs[self.steps[i], i].copy_(action_log_probs[i])
             self.masks[self.steps[i] + 1, i].copy_(masks[i])
             self.episodes_over[self.steps[i] + 1, i].copy_(episodes_over[i])
@@ -394,7 +413,7 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
         return full
 
     def _set_pivot(self):
-        """Find the step index of the last STOP action for each completed
+        """Find the step index of the last action for each completed
         episode. This allows us to return a batch of only complete episodes
         for scaling the loss. Incomplete episodes are saved for the next
         update. Sets self.pivots to be a list with dim [num_envs]. Only add
@@ -448,12 +467,13 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
         return loss_weights
 
     def _get_inflection_weights(self, gt_actions, episodes_over):
-        r"""Compute the inflection weights [Wijmans et al]. Note that in our
-        setting we are batching trajectories together yet still using
+        r"""Compute the inflection weights [Wijmans et al 2019]. Note that in
+        our setting we are batching trajectories together yet still using
         trajectory-based normalization. All normalization of the inflection
-        weighting loss is done in the weight coefficients here. Inflection
-        frequency was calculated from the training set as (number of actions)
-        / (number of inflection points). Paper link: https://bit.ly/2suE8oZ
+        weighting loss is done in the weight coefficients here. Inverse
+        inflection frequency was calculated from the training set as (number
+        of actions) / (number of inflection points).
+        Paper link: https://bit.ly/2suE8oZ
         Args:
             gt_actions: size [batch]
             episodes_over: size [batch x 1]
@@ -488,7 +508,7 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
             self.observations["instruction"]: [steps+1 x num_envs x 153]
             self.observations["rgb"]: [steps+1 x num_envs x 224 x 224 x channels=3]
             self.recurrent_hidden_states: [steps+1 x num_layers x num_envs x hidden_size]
-            self.prev_gt_actions [steps+1 x num_envs x 1]
+            self.prev_actions [steps+1 x num_envs x 1]
             self.gt_actions [steps x num_envs x 1]
             ...
 
@@ -499,7 +519,7 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
                 instruction: [batch x seq_length]
             recurrent_hidden_states_batch: [num_layers x batch x hidden_size]
             gt_actions_batch: [batch]
-            prev_gt_actions_batch: [batch x 1]
+            prev_actions_batch: [batch x 1]
             masks_batch: [batch x 1]
             episodes_over_batch: [batch x 1]
             action_log_probs_batch: [batch x 1]
@@ -524,9 +544,9 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
         gt_actions_batch = torch.cat(
             [self.gt_actions[: self.pivots[i] + 1, i] for i in self.envs_batch]
         ).squeeze()
-        prev_gt_actions_batch = torch.cat(
+        prev_actions_batch = torch.cat(
             [
-                self.prev_gt_actions[: self.pivots[i] + 1, i]
+                self.prev_actions[: self.pivots[i] + 1, i]
                 for i in self.envs_batch
             ]
         )
@@ -557,13 +577,9 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
             loss_weights = self._get_inflection_weights(
                 gt_actions_batch, episodes_over_batch
             )
-        elif self.loss_scaling == "NONE":
+        else:  # "NONE"
             loss_weights = torch.ones(episodes_over_batch.size(0)) / float(
                 gt_actions_batch.size(0)
-            )
-        else:
-            raise ValueError(
-                "IL.LOSS_SCALING must be one of [TRAJECTORY, INFLECTION, NONE]."
             )
         loss_weights = loss_weights.to(self.device)
 
@@ -571,7 +587,7 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
             observations_batch,
             recurrent_hidden_states_batch,
             gt_actions_batch,
-            prev_gt_actions_batch,
+            prev_actions_batch,
             masks_batch,
             episodes_over_batch,
             action_log_probs_batch,
@@ -612,8 +628,8 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
                 self.recurrent_hidden_states[: new_step + 1, :, i].copy_(
                     self.recurrent_hidden_states[self.pivots[i] + 1 :, :, i]
                 )
-                self.prev_gt_actions[: new_step + 1, i].copy_(
-                    self.prev_gt_actions[self.pivots[i] + 1 :, i]
+                self.prev_actions[: new_step + 1, i].copy_(
+                    self.prev_actions[self.pivots[i] + 1 :, i]
                 )
                 self.masks[: new_step + 1, i].copy_(
                     self.masks[self.pivots[i] + 1 :, i]
@@ -647,8 +663,8 @@ class RolloutStorageEpisodeBased(ILRolloutStorage):
                         self.pivots[i] + 1 : self.steps[i] + 1, :, i
                     ]
                 )
-                self.prev_gt_actions[: new_step + 1, i].copy_(
-                    self.prev_gt_actions[
+                self.prev_actions[: new_step + 1, i].copy_(
+                    self.prev_actions[
                         self.pivots[i] + 1 : self.steps[i] + 1, i
                     ]
                 )

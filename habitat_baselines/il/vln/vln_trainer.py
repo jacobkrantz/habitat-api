@@ -61,6 +61,10 @@ class ILVLN_Trainer(BaseRLTrainer):
         ) as f:
             self.gt_data = json.load(f)
 
+        assert (
+            config.IL.ALGORITHM == "TEACHER_FORCING"
+        ), "STUDENT_FORCING is WIP"
+
     def save_checkpoint(self, file_name: str) -> None:
         r"""Save checkpoint with specified name.
 
@@ -163,11 +167,12 @@ class ILVLN_Trainer(BaseRLTrainer):
             )
 
         rollouts = globals()[self.config.IL.ROLLOUT_CLASS](
-            self.config.IL.BATCH_SIZE,
+            self.config.IL.BUFFER_SIZE,
             self.envs.num_envs,
             self.envs.observation_spaces[0],
             self.envs.action_spaces[0],
             self.config.IL.LOSS_SCALING,
+            self.config.IL.ALGORITHM,
             self.config.RL.VLN.STATE_ENCODER.hidden_size,
         )
         rollouts.to(self.device)
@@ -192,9 +197,9 @@ class ILVLN_Trainer(BaseRLTrainer):
         t_env = 0.0
         with torch.no_grad():
             (
-                step_observation,
+                step_observations,
                 recurrent_hidden_states_input,
-                prev_gt_actions_input,
+                prev_actions_input,
                 masks_input,
                 env_steps,
             ) = rollouts.get_forward_pass_data(env_steps)
@@ -204,26 +209,40 @@ class ILVLN_Trainer(BaseRLTrainer):
                 agent_actions_log_probs,
                 recurrent_hidden_states,
             ) = self.policy.act(
-                step_observation,
+                step_observations,
                 recurrent_hidden_states_input,
-                prev_gt_actions_input,
+                prev_actions_input,
                 masks_input,
                 deterministic=True,
             )
 
-        gt_actions = self.get_gt_actions(
-            step_observation, self.envs.current_episodes(), env_steps
-        )
-
         t_env_step = time.time()
-        gt_observations = self.envs.step([a.item() for a in gt_actions])
+        if self.config.IL.ALGORITHM == "TEACHER_FORCING":
+            gt_actions = self.get_gt_actions(
+                step_observations, self.envs.current_episodes(), env_steps
+            )
+            update_actions = gt_actions
+        else:  # STUDENT_FORCING
+            gt_actions = (
+                torch.tensor(
+                    [
+                        self.envs.call_at(i, "get_best_action")
+                        for i in range(self.envs.num_envs)
+                    ]
+                )
+                .unsqueeze(dim=1)
+                .to(self.device)
+            )
+            update_actions = agent_actions
+
+        observations = self.envs.step([a.item() for a in update_actions])
         env_steps += 1
         t_env += time.time() - t_env_step
 
         masks = torch.tensor(
             [
                 [0.0] if a == HabitatSimActions.STOP else [1.0]
-                for a in gt_actions
+                for a in update_actions
             ],
             dtype=torch.float,
         )
@@ -239,18 +258,18 @@ class ILVLN_Trainer(BaseRLTrainer):
         t_env_step = time.time()
         for i in range(self.envs.num_envs):
             if episodes_over[i]:
-                gt_observations[i] = self.envs.reset_at(i)[0]
+                observations[i] = self.envs.reset_at(i)[0]
         t_env += time.time() - t_env_step
 
-        gt_observation_batch = batch_obs(
+        observations_batch = batch_obs(
             transform_observations(
-                gt_observations,
+                observations,
                 self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
             )
         )
 
         rollouts.insert(
-            gt_observation_batch,
+            observations_batch,
             gt_actions,
             masks,
             recurrent_hidden_states,
@@ -297,6 +316,11 @@ class ILVLN_Trainer(BaseRLTrainer):
         )
         if not os.path.isdir(self.config.CHECKPOINT_FOLDER):
             os.makedirs(self.config.CHECKPOINT_FOLDER)
+
+        assert self.config.IL.ALGORITHM in [
+            "TEACHER_FORCING",
+            "STUDENT_FORCING",
+        ], "IL.ALGORITHM must be either `TEACHER_FORCING` or `STUDENT_FORCING`"
 
         self._setup_agent(self.config.RL.VLN)
         logger.info(
