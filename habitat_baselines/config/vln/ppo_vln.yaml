@@ -4,14 +4,14 @@ ENV_NAME: "VLNRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID: 0
 VIDEO_OPTION: ["disk", "tensorboard"]
-TENSORBOARD_DIR: tensorboard_dirs/debug/debug
+TENSORBOARD_DIR: "tensorboard_dirs/debug"
 VIDEO_DIR: "videos/debug"
 TEST_EPISODE_COUNT: 10
-EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/debug/debug"
+EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/debug"
 NUM_PROCESSES: 1
 SENSORS: ["RGB_SENSOR", "DEPTH_SENSOR"]
-CHECKPOINT_FOLDER: "data/checkpoints/vln/debug/debug"
-NUM_UPDATES: 5000000
+CHECKPOINT_FOLDER: "data/checkpoints/vln/debug"
+NUM_UPDATES: 500000
 LOG_INTERVAL: 10
 CHECKPOINT_INTERVAL: 500  # 100
 EVAL:
@@ -21,6 +21,9 @@ EVAL:
 RL:
   SUCCESS_REWARD: 10.0
   SLACK_REWARD: -0.01
+
+  LOAD_FROM_CKPT: True
+  CKPT_TO_LOAD: "data/checkpoints/vln/il/6/ckpt.64.pth"
 
   PPO:
     # ppo params

@@ -11,6 +11,7 @@ from typing import Dict, List
 
 import numpy as np
 import torch
+import torch.nn as nn
 from gym import spaces
 from torch.optim.lr_scheduler import LambdaLR
 
@@ -48,6 +49,74 @@ class PPOVLN_Trainer(BaseRLTrainer):
         self.envs = None
         if config is not None:
             logger.info(f"config: {config}")
+
+    def _setup_actor_critic_agent_training(self, rl_cfg: Config) -> None:
+        r"""Sets up actor critic and agent for PPO.
+
+        Args:
+            rl_cfg: config node with relevant params
+
+        Returns:
+            None
+        """
+        logger.add_filehandler(self.config.LOG_FILE)
+
+        # Add TORCH_GPU_ID to VLN config for a ResNet layer
+        rl_cfg.defrost()
+        rl_cfg.VLN.TORCH_GPU_ID = self.config.TORCH_GPU_ID
+        rl_cfg.freeze()
+
+        self.actor_critic = VLNBaselinePolicy(
+            observation_space=self.envs.observation_spaces[0],
+            action_space=self.envs.action_spaces[0],
+            vln_config=rl_cfg.VLN,
+        )
+        self.actor_critic.to(self.device)
+
+        if rl_cfg.LOAD_FROM_CKPT:
+            # assumes config params are the same. Manually removes first
+            # keyword to conform to expected key name.
+            logger.info(f"Loading checkpoint: {rl_cfg.CKPT_TO_LOAD}")
+            il_checkpoint = self.load_checkpoint(
+                rl_cfg.CKPT_TO_LOAD, map_location=self.device
+            )
+            logger.info(
+                f"Loading weights expecting CONFIG.RL.VLN params: {il_checkpoint['config']['RL']['VLN']}"
+            )
+
+            il_checkpoint_dict = {}
+            for k, v in il_checkpoint["state_dict"].items():
+                layer_name = ".".join(k.split(".")[1:])
+                il_checkpoint_dict[layer_name] = v
+
+            del il_checkpoint
+            not_updated = [
+                k
+                for k in self.actor_critic.state_dict().keys()
+                if k not in il_checkpoint_dict.keys()
+            ]
+            if not_updated:
+                logger.warn(
+                    f"Layers not loaded from checkpoint ({len(not_updated)}):\n"
+                    + "\n".join(not_updated)
+                )
+
+            self.actor_critic.load_state_dict(il_checkpoint_dict, strict=False)
+            del il_checkpoint_dict
+
+        ppo_cfg = rl_cfg.PPO
+        self.agent = PPO(
+            actor_critic=self.actor_critic,
+            clip_param=ppo_cfg.clip_param,
+            ppo_epoch=ppo_cfg.ppo_epoch,
+            num_mini_batch=ppo_cfg.num_mini_batch,
+            value_loss_coef=ppo_cfg.value_loss_coef,
+            entropy_coef=ppo_cfg.entropy_coef,
+            lr=ppo_cfg.lr,
+            eps=ppo_cfg.eps,
+            max_grad_norm=ppo_cfg.max_grad_norm,
+            use_normalized_advantage=ppo_cfg.use_normalized_advantage,
+        )
 
     def _setup_actor_critic_agent(self, rl_cfg: Config) -> None:
         r"""Sets up actor critic and agent for PPO.
@@ -230,10 +299,20 @@ class PPOVLN_Trainer(BaseRLTrainer):
 
         if not os.path.isdir(self.config.CHECKPOINT_FOLDER):
             os.makedirs(self.config.CHECKPOINT_FOLDER)
-        self._setup_actor_critic_agent(rl_config)
+
+        self._setup_actor_critic_agent_training(rl_config)
         logger.info(
             "agent number of parameters: {}".format(
-                sum(param.numel() for param in self.agent.parameters())
+                sum(p.numel() for p in self.agent.parameters())
+            )
+        )
+        logger.info(
+            "agent number of trainable parameters: {}".format(
+                sum(
+                    p.numel()
+                    for p in self.agent.parameters()
+                    if p.requires_grad
+                )
             )
         )
 

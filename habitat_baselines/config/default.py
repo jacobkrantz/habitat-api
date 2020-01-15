@@ -49,6 +49,8 @@ _C.EVAL.USE_CKPT_CONFIG = True
 _C.RL = CN()
 _C.RL.SUCCESS_REWARD = 10.0
 _C.RL.SLACK_REWARD = -0.01
+_C.RL.LOAD_FROM_CKPT = False
+_C.RL.CKPT_TO_LOAD = "data/checkpoints/ckpt.0.pth"
 # -----------------------------------------------------------------------------
 # PROXIMAL POLICY OPTIMIZATION (PPO)
 # -----------------------------------------------------------------------------

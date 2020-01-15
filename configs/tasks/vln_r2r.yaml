@@ -37,13 +37,13 @@ TASK:
   NDTW:
     TYPE: NDTW
     FDTW: True  # False: DTW
-    SPLIT: val_seen
+    SPLIT: train
     SUCCESS_DISTANCE: 3.0
     GT_PATH: "data/datasets/vln/mp3d/r2r/v1/preprocessed/{split}/{split}_gt_all.json.gz"
   SDTW:
     TYPE: SDTW
     FDTW: True  # False: DTW
-    SPLIT: val_seen
+    SPLIT: train
     SUCCESS_DISTANCE: 3.0
     GT_PATH: "data/datasets/vln/mp3d/r2r/v1/preprocessed/{split}/{split}_gt_all.json.gz"
   SPL:
@@ -55,6 +55,6 @@ TASK:
     SUCCESS_DISTANCE: 3.0
 DATASET:
   TYPE: R2RVLN-v1
-  SPLIT: val_seen
+  SPLIT: train
   DATA_PATH: "./data/datasets/vln/mp3d/r2r/v1/preprocessed/{split}/{split}.json.gz"
   SCENES_DIR: "data/scene_datasets/"
