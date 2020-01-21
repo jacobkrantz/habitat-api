@@ -18,6 +18,7 @@ CONFIG_FILE_SEPARATOR = ","
 # -----------------------------------------------------------------------------
 _C = CN()
 _C.BASE_TASK_CONFIG_PATH = "configs/tasks/pointnav.yaml"
+_C.RUN_NAME = "debug"
 _C.TASK_CONFIG = CN()  # task_config will be stored as a config node
 _C.CMD_TRAILING_OPTS = []  # store command line options as list of strings
 _C.TRAINER_NAME = "ppo"
@@ -73,6 +74,17 @@ _C.RL.PPO.tau = 0.95
 _C.RL.PPO.reward_window_size = 50
 _C.RL.PPO.use_normalized_advantage = True
 # -----------------------------------------------------------------------------
+# DAGGER ENVIRONMENT CONFIG
+# -----------------------------------------------------------------------------
+_C.DAGGER = CN()
+_C.DAGGER.LR = 1e-3
+_C.DAGGER.STABBINGS = 5
+_C.DAGGER.EPOCHS = 10
+_C.DAGGER.UPDATE_SIZE = 20000
+_C.DAGGER.BATCH_SIZE = 5
+_C.DAGGER.P = 0.75
+_C.DAGGER.USE_IW = False
+# -----------------------------------------------------------------------------
 # IMITATION LEARNING (IL) ENVIRONMENT CONFIG
 # -----------------------------------------------------------------------------
 _C.IL = CN()
@@ -111,6 +123,7 @@ _C.RL.VLN.VISUAL_ENCODER = CN()
 # VISUAL_ENCODER cnn_type must be of 'SimpleRGBCNN' or 'ResNet50'
 _C.RL.VLN.VISUAL_ENCODER.cnn_type = "SimpleRGBCNN"
 _C.RL.VLN.VISUAL_ENCODER.output_size = 512
+_C.RL.VLN.VISUAL_ENCODER.activation = "tanh"  # relu or tanh
 _C.RL.VLN.DEPTH_ENCODER = CN()
 _C.RL.VLN.DEPTH_ENCODER.cnn_type = "SimpleDepthCNN"
 _C.RL.VLN.DEPTH_ENCODER.output_size = 512

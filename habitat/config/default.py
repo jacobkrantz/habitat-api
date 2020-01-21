@@ -106,6 +106,18 @@ _C.TASK.PROXIMITY_SENSOR = CN()
 _C.TASK.PROXIMITY_SENSOR.TYPE = "ProximitySensor"
 _C.TASK.PROXIMITY_SENSOR.MAX_DETECTION_RADIUS = 2.0
 # -----------------------------------------------------------------------------
+# ORACLE ACTION SENSOR
+# -----------------------------------------------------------------------------
+_C.TASK.ORACLE_ACTION_SENSOR = CN()
+_C.TASK.ORACLE_ACTION_SENSOR.TYPE = "OracleActionSensor"
+_C.TASK.ORACLE_ACTION_SENSOR.GOAL_RADIUS = 0.5
+# -----------------------------------------------------------------------------
+# VLN ORACLE ACTION SENSOR
+# -----------------------------------------------------------------------------
+_C.TASK.VLN_ORACLE_ACTION_SENSOR = CN()
+_C.TASK.VLN_ORACLE_ACTION_SENSOR.TYPE = "VLNOracleActionSensor"
+_C.TASK.VLN_ORACLE_ACTION_SENSOR.GOAL_RADIUS = 0.5
+# -----------------------------------------------------------------------------
 # SPL MEASUREMENT
 # -----------------------------------------------------------------------------
 _C.TASK.SPL = CN()

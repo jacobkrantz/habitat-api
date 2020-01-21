@@ -21,9 +21,11 @@ from gym import spaces
 from habitat.config import Config
 from habitat.core.embodied_task import EmbodiedTask, Measure
 from habitat.core.registry import registry
-from habitat.core.simulator import Observations, Sensor, Simulator
+from habitat.core.simulator import Observations, Sensor, SensorTypes, Simulator
 from habitat.core.utils import not_none_validator
+from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.tasks.nav.nav import NavigationEpisode, NavigationTask
+from habitat.tasks.nav.shortest_path_follower import ShortestPathFollower
 
 
 @attr.s(auto_attribs=True)
@@ -83,6 +85,50 @@ class InstructionSensor(Sensor):
 
     def get_observation(self, **kwargs):
         return self._get_observation(**kwargs)
+
+
+@registry.register_sensor
+class VLNOracleActionSensor(Sensor):
+    r"""Sensor for observing the optimal action to take. The assumption this
+    sensor currently makes is that the shortest path to the goal is the
+    optimal path.
+
+    Args:
+        sim: reference to the simulator for calculating task observations.
+        config: config for the sensor.
+    """
+
+    def __init__(self, sim, config, *args: Any, **kwargs: Any):
+        self._sim = sim
+        super().__init__(config=config)
+        self.follower = ShortestPathFollower(
+            self._sim,
+            # all goals can be navigated to within 0.5m.
+            goal_radius=getattr(config, "GOAL_RADIUS", 0.5),
+            return_one_hot=False,
+        )
+        self.follower.mode = "geodesic_path"
+
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "vln_oracle_action_sensor"
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.TACTILE
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        return spaces.Box(low=0.0, high=100, shape=(1,), dtype=np.float)
+
+    def get_observation(
+        self, observations, *args: Any, episode, **kwargs: Any
+    ):
+        best_action = self.follower.get_next_action(episode.goals[0].position)
+        return np.array(
+            [
+                best_action
+                if best_action is not None
+                else HabitatSimActions.STOP
+            ]
+        )
 
 
 @registry.register_measure

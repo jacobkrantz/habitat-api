@@ -18,7 +18,9 @@ class ResNet50(nn.Module):
         device: torch.device
     """
 
-    def __init__(self, observation_space, output_size, device):
+    def __init__(
+        self, observation_space, output_size, device, activation="tanh"
+    ):
         super().__init__()
         self.device = device
         self.resnet_layer_size = 2048
@@ -48,7 +50,7 @@ class ResNet50(nn.Module):
         self.cnn.eval()
 
         self.fc = nn.Linear(linear_layer_input_size, output_size)
-        self.activation = nn.Tanh()
+        self.activation = nn.Tanh() if activation == "tanh" else nn.ReLU()
 
     @property
     def is_blind(self):

@@ -1,0 +1,53 @@
+BASE_TASK_CONFIG_PATH: "configs/tasks/vln_r2r.yaml"
+TRAINER_NAME: "dagger"
+RUN_NAME: debug
+ENV_NAME: "VLNRLEnv"
+SIMULATOR_GPU_ID: 0
+TORCH_GPU_ID: 0
+TENSORBOARD_DIR: tensorboard_dirs/debug
+NUM_PROCESSES: 1
+SENSORS: ["RGB_SENSOR", "DEPTH_SENSOR"]
+CHECKPOINT_FOLDER: "data/checkpoints/vln/debug"
+# EVAL_CKPT_PATH_DIR: "data/checkpoints/vln/debug"  # if file, eval just that checkpoint.
+# VIDEO_OPTION: []  # ["disk", "tensorboard"]
+# VIDEO_DIR: "videos/debug"
+# TEST_EPISODE_COUNT: 10
+# NUM_UPDATES: 100000
+# LOG_INTERVAL: 10
+# CHECKPOINT_INTERVAL: 200
+# EVAL:
+#   USE_CKPT_CONFIG: False
+#   SPLIT: val_seen
+
+DAGGER:
+  LR: 1e-3
+  STABBINGS: 1  # 5
+  EPOCHS: 2   # 10
+  UPDATE_SIZE: 2  # 20000
+  BATCH_SIZE: 2
+  P: 0.75
+  USE_IW: True
+
+RL:
+  VLN:
+    # Vision and Language Navigation parameters
+    INSTRUCTION_ENCODER:
+      vocab_size: 2504
+      max_length: 153
+      use_pretrained_embeddings: True
+      embedding_file: "./data/datasets/vln/mp3d/r2r/v1/preprocessed/embeddings.json"
+      dataset_vocab: "./data/datasets/vln/mp3d/r2r/v1/preprocessed/train/train.json.gz"
+      fine_tune_embeddings: False
+      embedding_size: 50
+      hidden_size: 128
+      rnn_type: "LSTM"
+    DEPTH_ENCODER:
+      cnn_type: "SimpleDepthCNN"
+      output_size: 128
+    VISUAL_ENCODER:
+      cnn_type: "ResNet50"
+      output_size: 256
+      activation: "relu"
+    STATE_ENCODER:
+      hidden_size: 512
+      rnn_type: "GRU"  # Currently only works with GRU
