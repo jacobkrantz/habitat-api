@@ -6,6 +6,7 @@
 
 from habitat_baselines.common.base_trainer import BaseRLTrainer, BaseTrainer
 from habitat_baselines.il.vln import vln_trainer
+from habitat_baselines.rl.ddppo import DDPPOTrainer
 from habitat_baselines.rl.ppo.ppo_trainer import PPOTrainer, RolloutStorage
 from habitat_baselines.rl.vln.ppo.ppo_vln_trainer import PPOVLN_Trainer
 
