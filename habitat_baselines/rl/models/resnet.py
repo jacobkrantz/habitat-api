@@ -6,6 +6,68 @@ import torchvision.transforms as transforms
 from torch.autograd import Variable
 
 from habitat_baselines.common.utils import Flatten
+from habitat_baselines.rl.ddppo.policy import resnet
+from habitat_baselines.rl.ddppo.policy.resnet_policy import ResNetEncoder
+
+
+class HackObservationSpace:
+    def __init__(self, depth_space):
+        self.spaces = {"depth": depth_space}
+
+
+class VlnResnetDepthEncoder(nn.Module):
+    def __init__(
+        self,
+        observation_space,
+        output_size=128,
+        checkpoint="NONE",
+        backbone="resnet50",
+        resnet_baseplanes=32,
+        normalize_visual_inputs=False,
+        trainable=False,
+    ):
+        super().__init__()
+        self.visual_encoder = ResNetEncoder(
+            HackObservationSpace(observation_space.spaces["depth"]),
+            baseplanes=resnet_baseplanes,
+            ngroups=resnet_baseplanes // 2,
+            make_backbone=getattr(resnet, backbone),
+            normalize_visual_inputs=normalize_visual_inputs,
+        )
+
+        for param in self.visual_encoder.parameters():
+            param.requires_grad_(trainable)
+
+        if checkpoint != "NONE":
+            ddppo_weights = torch.load(checkpoint)
+
+            weights_dict = {}
+            for k, v in ddppo_weights["state_dict"].items():
+                split_layer_name = k.split(".")[2:]
+                if split_layer_name[0] != "visual_encoder":
+                    continue
+
+                layer_name = ".".join(split_layer_name[1:])
+                weights_dict[layer_name] = v
+
+            del ddppo_weights
+            self.visual_encoder.load_state_dict(weights_dict, strict=True)
+
+        self.visual_fc = nn.Sequential(
+            Flatten(),
+            nn.Linear(np.prod(self.visual_encoder.output_shape), output_size),
+            nn.ReLU(True),
+        )
+
+    def forward(self, observations):
+        """
+        Args:
+            observations: [BATCH, HEIGHT, WIDTH, CHANNEL]
+        Returns:
+            [BATCH, OUTPUT_SIZE]
+        """
+        x = self.visual_encoder(observations)
+        return self.visual_fc(x)
 
 
 class ResNet50(nn.Module):

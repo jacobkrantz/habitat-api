@@ -13,7 +13,7 @@ from gym import Space
 from habitat import Config
 from habitat_baselines.common.utils import CategoricalNet, Flatten
 from habitat_baselines.rl.models.instruction_encoder import InstructionEncoder
-from habitat_baselines.rl.models.resnet import ResNet50
+from habitat_baselines.rl.models.resnet import ResNet50, VlnResnetDepthEncoder
 from habitat_baselines.rl.models.rnn_state_encoder import RNNStateEncoder
 from habitat_baselines.rl.models.simple_cnn import (
     SimpleCNN,
@@ -57,11 +57,19 @@ class VLNBaselineNet(Net):
 
         # Init the depth encoder
         assert vln_config.DEPTH_ENCODER.cnn_type in [
-            "SimpleDepthCNN"
-        ], "DEPTH_ENCODER.cnn_type must be SimpleDepthCNN"
+            "SimpleDepthCNN",
+            "VlnResnetDepthEncoder",
+        ], "DEPTH_ENCODER.cnn_type must be SimpleDepthCNN or VlnResnetDepthEncoder"
         if vln_config.DEPTH_ENCODER.cnn_type == "SimpleDepthCNN":
             self.depth_encoder = SimpleDepthCNN(
                 observation_space, vln_config.DEPTH_ENCODER.output_size
+            )
+        elif vln_config.DEPTH_ENCODER.cnn_type == "VlnResnetDepthEncoder":
+            self.depth_encoder = VlnResnetDepthEncoder(
+                observation_space,
+                output_size=vln_config.DEPTH_ENCODER.output_size,
+                checkpoint=vln_config.DEPTH_ENCODER.ddppo_checkpoint,
+                backbone=vln_config.DEPTH_ENCODER.backbone,
             )
 
         # Init the RGB visual encoder
@@ -84,6 +92,7 @@ class VLNBaselineNet(Net):
                 observation_space,
                 vln_config.VISUAL_ENCODER.output_size,
                 device,
+                activation=vln_config.VISUAL_ENCODER.activation,
             )
 
         # Init the RNN state decoder

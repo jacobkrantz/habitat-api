@@ -125,8 +125,12 @@ _C.RL.VLN.VISUAL_ENCODER.cnn_type = "SimpleRGBCNN"
 _C.RL.VLN.VISUAL_ENCODER.output_size = 512
 _C.RL.VLN.VISUAL_ENCODER.activation = "tanh"  # relu or tanh
 _C.RL.VLN.DEPTH_ENCODER = CN()
-_C.RL.VLN.DEPTH_ENCODER.cnn_type = "SimpleDepthCNN"
+_C.RL.VLN.DEPTH_ENCODER.cnn_type = "SimpleDepthCNN"  # or VlnResnetDepthEncoder
 _C.RL.VLN.DEPTH_ENCODER.output_size = 512
+_C.RL.VLN.DEPTH_ENCODER.backbone = "NONE"  # type of resnet to use
+_C.RL.VLN.DEPTH_ENCODER.ddppo_checkpoint = (
+    "NONE"  # path to DDPPO resnet weights
+)
 _C.RL.VLN.STATE_ENCODER = CN()
 _C.RL.VLN.STATE_ENCODER.hidden_size = 512
 _C.RL.VLN.STATE_ENCODER.rnn_type = "GRU"

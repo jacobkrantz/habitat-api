@@ -26,7 +26,7 @@ with warnings.catch_warnings():
     import tensorflow as tf
 
 
-LMDB_MAP_SIZE = 2 ** 40  # 1 TB.    int(1e9)  # in bytes: 1 GB.
+LMDB_MAP_SIZE = 2 ** 40  # 1 TB.    int(1e9) in bytes: 1 GB.
 
 
 class ObservationsDict(dict):
@@ -539,6 +539,11 @@ class DaggerTrainer(BaseRLTrainer):
                             ),
                         )
 
+                        logger.info(f"train_loss: {loss}")
+                        logger.info(f"Batches processed: {step_id}.")
+                        logger.info(
+                            f"On DAgger iter {dagger_it}, Epoch {epoch}."
+                        )
                         writer.add_scalar("train_loss", loss, step_id)
                         step_id += 1
 

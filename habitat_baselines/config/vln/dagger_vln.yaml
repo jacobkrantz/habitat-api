@@ -22,9 +22,9 @@ CHECKPOINT_FOLDER: "data/checkpoints/vln/debug"
 DAGGER:
   LR: 1e-3
   STABBINGS: 1  # 5
-  EPOCHS: 2   # 10
-  UPDATE_SIZE: 2  # 20000
-  BATCH_SIZE: 2
+  EPOCHS: 2  # 10
+  UPDATE_SIZE: 2  # 7500
+  BATCH_SIZE: 2  # 5
   P: 0.75
   USE_IW: True
 
@@ -42,8 +42,10 @@ RL:
       hidden_size: 128
       rnn_type: "LSTM"
     DEPTH_ENCODER:
-      cnn_type: "SimpleDepthCNN"
+      cnn_type: "SimpleDepthCNN"  # VlnResnetDepthEncoder
       output_size: 128
+      backbone: "resnet50"
+      ddppo_checkpoint: "data/dd-ppo-weights/gibson-2plus-resnet50.pth"
     VISUAL_ENCODER:
       cnn_type: "ResNet50"
       output_size: 256
