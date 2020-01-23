@@ -619,10 +619,6 @@ class ILVLN_Trainer(BaseRLTrainer):
 
         self.envs.close()
 
-        split = config.TASK_CONFIG.DATASET.SPLIT
-        with open(f"stats_episodes_{split}.json", "w") as f:
-            json.dump(stats_episodes, f, indent=4)
-
         time.sleep(5)
         aggregated_stats = {}
         num_episodes = len(stats_episodes)
@@ -632,5 +628,11 @@ class ILVLN_Trainer(BaseRLTrainer):
                 / num_episodes
             )
 
+        split = config.TASK_CONFIG.DATASET.SPLIT
+        with open(f"stats_episodes_{checkpoint_index}_{split}.json", "w") as f:
+            json.dump(aggregated_stats, f, indent=4)
+
+        checkpoint_num = 605564 * (checkpoint_index + 1) 
         for k, v in aggregated_stats.items():
             logger.info(f"Average episode {k}: {v:.6f}")
+            writer.add_scalar(f"mini_eval_{k}", v, checkpoint_num)

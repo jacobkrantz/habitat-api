@@ -43,6 +43,10 @@ python setup.py develop --all
 # job scripts to run
 python habitat_baselines/run.py --run-type train --exp-config habitat_baselines/config/vln/imitation_vln.yaml
 
+# other common run commands:
+# python habitat_baselines/run.py --run-type train --exp-config habitat_baselines/config/vln/ppo_vln.yaml
+# python habitat_baselines/run.py --run-type eval --exp-config habitat_baselines/config/vln/imitation_vln.yaml
+
 echo "Job Finished."
 date
 echo "-------------------------"
