@@ -42,7 +42,7 @@ RL:
       hidden_size: 128
       rnn_type: "LSTM"
     DEPTH_ENCODER:
-      cnn_type: "SimpleDepthCNN"  # VlnResnetDepthEncoder
+      cnn_type: "SimpleDepthCNN"  # SimpleDepthCNN or VlnResnetDepthEncoder
       output_size: 128
       backbone: "resnet50"
       ddppo_checkpoint: "data/dd-ppo-weights/gibson-2plus-resnet50.pth"

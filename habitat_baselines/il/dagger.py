@@ -290,21 +290,10 @@ class DaggerTrainer(BaseRLTrainer):
         )
         batch = batch_obs(observations, self.device)
 
-        episodes = []
-        dones = []
-        skips = []
-        for i in range(self.envs.num_envs):
-            episodes.append(
-                [
-                    (
-                        observations[i],
-                        prev_actions[i].item(),
-                        batch["vln_oracle_action_sensor"][i].item(),
-                    )
-                ]
-            )
-            dones.append(False)
-            skips.append(False)
+        episodes = [[] for _ in range(self.envs.num_envs)]
+        skips = [False for _ in range(self.envs.num_envs)]
+        # Populate dones with False initially
+        dones = [False for _ in range(self.envs.num_envs)]
 
         # https://arxiv.org/pdf/1011.0686.pdf
         # Theoretically, any beta function is fine so long as it converges to
