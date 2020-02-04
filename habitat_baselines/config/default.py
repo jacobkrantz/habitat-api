@@ -83,6 +83,7 @@ _C.DAGGER.EPOCHS = 10
 _C.DAGGER.UPDATE_SIZE = 20000
 _C.DAGGER.BATCH_SIZE = 5
 _C.DAGGER.P = 0.75
+_C.DAGGER.LMDB_MAP_SIZE = 1e9  # 1GB
 _C.DAGGER.USE_IW = False
 # -----------------------------------------------------------------------------
 # IMITATION LEARNING (IL) ENVIRONMENT CONFIG

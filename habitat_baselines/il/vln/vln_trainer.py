@@ -9,7 +9,6 @@ import json
 import os
 import time
 from collections import deque
-import time
 from typing import Dict, List
 
 import numpy as np
@@ -28,17 +27,13 @@ from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.env_utils import construct_envs_auto_reset_false
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
+from habitat_baselines.common.utils import batch_obs, generate_video
 from habitat_baselines.il.policy import ILAgent, VLNILBaselinePolicy
 from habitat_baselines.il.rollout_storage import (
     RolloutStorageEpisodeBased,
     RolloutStorageFixedBatch,
 )
 from habitat_baselines.rl.vln.ppo.utils import transform_observations
-
-from habitat_baselines.common.utils import (  # linear_decay,
-    generate_video,
-    batch_obs,
-)
 
 
 @baseline_registry.register_trainer(name="imitation_vln")
@@ -509,6 +504,8 @@ class ILVLN_Trainer(BaseRLTrainer):
             os.makedirs(self.config.VIDEO_DIR, exist_ok=True)
             rgb_frames = [[] for _ in range(self.config.NUM_PROCESSES)]
 
+        self.agent.net.eval()
+
         # loop for each step to cover all test episodes
         while (
             self.envs.num_envs
@@ -632,7 +629,7 @@ class ILVLN_Trainer(BaseRLTrainer):
         with open(f"stats_episodes_{checkpoint_index}_{split}.json", "w") as f:
             json.dump(aggregated_stats, f, indent=4)
 
-        checkpoint_num = 605564 * (checkpoint_index + 1) 
+        checkpoint_num = 605564 * (checkpoint_index + 1)
         for k, v in aggregated_stats.items():
             logger.info(f"Average episode {k}: {v:.6f}")
             writer.add_scalar(f"mini_eval_{k}", v, checkpoint_num)

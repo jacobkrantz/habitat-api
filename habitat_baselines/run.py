@@ -18,7 +18,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--run-type",
-        choices=["train", "eval"],
+        choices=["train", "eval", "eval-reverse"],
         required=True,
         help="run type of the experiment (train or eval)",
     )
@@ -66,6 +66,8 @@ def run_exp(exp_config: str, run_type: str, opts=None) -> None:
         trainer.train()
     elif run_type == "eval":
         trainer.eval()
+    elif run_type == "eval-reverse":
+        trainer.eval_reverse()
 
 
 if __name__ == "__main__":

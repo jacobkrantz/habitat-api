@@ -4,6 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import glob
 import os
 import time
 from typing import ClassVar, Dict, List
@@ -61,6 +62,50 @@ class BaseRLTrainer(BaseTrainer):
 
     def train(self) -> None:
         raise NotImplementedError
+
+    def eval_reverse(self) -> None:
+        r"""Similar to .eval() but evaluates checkpoints started at the latest
+        and working back toward the start (checkpoint n -> checkpoint 0). Does
+        not poll for new checkpoints.
+        """
+        self.device = (
+            torch.device("cuda", self.config.TORCH_GPU_ID)
+            if torch.cuda.is_available()
+            else torch.device("cpu")
+        )
+
+        if "tensorboard" in self.config.VIDEO_OPTION:
+            assert (
+                len(self.config.TENSORBOARD_DIR) > 0
+            ), "Must specify a tensorboard directory for video display"
+        if "disk" in self.config.VIDEO_OPTION:
+            assert (
+                len(self.config.VIDEO_DIR) > 0
+            ), "Must specify a directory for storing videos on disk"
+
+        with TensorboardWriter(
+            self.config.TENSORBOARD_DIR, flush_secs=self.flush_secs
+        ) as writer:
+            if os.path.isfile(self.config.EVAL_CKPT_PATH_DIR):
+                # evaluate singe checkpoint
+                self._eval_checkpoint(self.config.EVAL_CKPT_PATH_DIR, writer)
+            else:
+                # evaluate multiple checkpoints in reverse order
+                models_paths = list(
+                    filter(
+                        os.path.isfile,
+                        glob.glob(self.config.EVAL_CKPT_PATH_DIR + "/*"),
+                    )
+                )
+                models_paths.sort(key=os.path.getmtime, reverse=True)
+                for current_ckpt in models_paths:
+                    logger.info(f"=======current_ckpt: {current_ckpt}=======")
+                    ckpt_ind = int(current_ckpt.split(".")[-2])
+                    self._eval_checkpoint(
+                        checkpoint_path=current_ckpt,
+                        writer=writer,
+                        checkpoint_index=ckpt_ind,
+                    )
 
     def eval(self) -> None:
         r"""Main method of trainer evaluation. Calls _eval_checkpoint() that
