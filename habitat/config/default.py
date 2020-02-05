@@ -316,7 +316,7 @@ _C.SIMULATOR.HABITAT_SIM_V0.GPU_DEVICE_ID = 0
 # for the caveats that results in
 _C.SIMULATOR.HABITAT_SIM_V0.GPU_GPU = False
 # Whether or not the agent slides on collisions
-_C.SIMULATOR.HABITAT_SIM_V0.ALLOW_SLIDING = True
+# _C.SIMULATOR.HABITAT_SIM_V0.ALLOW_SLIDING = True  # not in Habitat-sim 1.3.2
 _C.SIMULATOR.HABITAT_SIM_V0.ENABLE_PHYSICS = False
 _C.SIMULATOR.HABITAT_SIM_V0.PHYSICS_CONFIG_FILE = (
     "./data/default.phys_scene_config.json"
