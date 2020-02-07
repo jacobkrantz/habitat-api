@@ -24,6 +24,7 @@ from habitat_baselines.common.env_utils import (
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
 from habitat_baselines.common.utils import batch_obs, transform_obs
+from habitat_baselines.models.rcm.vln_rcm_policy import VLNRCMPolicy
 from habitat_baselines.models.vln_baseline_policy import VLNBaselinePolicy
 
 with warnings.catch_warnings():
@@ -232,11 +233,18 @@ class DaggerTrainer(BaseRLTrainer):
         config.TORCH_GPU_ID = self.config.TORCH_GPU_ID
         config.freeze()
 
-        self.actor_critic = VLNBaselinePolicy(
-            observation_space=self.envs.observation_spaces[0],
-            action_space=self.envs.action_spaces[0],
-            vln_config=config,
-        )
+        if config.RCM.use:
+            self.actor_critic = VLNRCMPolicy(
+                observation_space=self.envs.observation_spaces[0],
+                action_space=self.envs.action_spaces[0],
+                vln_config=config,
+            )
+        else:
+            self.actor_critic = VLNBaselinePolicy(
+                observation_space=self.envs.observation_spaces[0],
+                action_space=self.envs.action_spaces[0],
+                vln_config=config,
+            )
         self.actor_critic.to(self.device)
 
         self.optimizer = torch.optim.Adam(
@@ -274,8 +282,10 @@ class DaggerTrainer(BaseRLTrainer):
         return torch.load(checkpoint_path, *args, **kwargs)
 
     def _update_dataset(self, data_it):
-        with torch.cuda.device(self.device):
-            torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            with torch.cuda.device(self.device):
+                torch.cuda.empty_cache()
+
         if self.envs is None:
             self.envs = construct_envs(
                 self.config, get_env_class(self.config.ENV_NAME)
@@ -296,7 +306,7 @@ class DaggerTrainer(BaseRLTrainer):
 
         observations = self.envs.reset()
         observations = transform_obs(
-            observations, self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
+            observations, self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID
         )
         batch = batch_obs(observations, self.device)
 
@@ -315,16 +325,34 @@ class DaggerTrainer(BaseRLTrainer):
         else:
             beta = self.config.DAGGER.P ** data_it
 
+        def hook_builder(tgt_tensor):
+            def hook(m, i, o):
+                tgt_tensor.set_(o.cpu())
+
+            return hook
+
+        rgb_features = torch.zeros((1,), device="cpu")
+        rgb_hook = self.actor_critic.net.visual_encoder.layer_extract.register_forward_hook(
+            hook_builder(rgb_features)
+        )
+
+        depth_features = None
+        depth_hook = None
+        if self.config.VLN.DEPTH_ENCODER.cnn_type == "VlnResnetDepthEncoder":
+            depth_features = torch.zeros((1,), device="cpu")
+            depth_hook = self.actor_critic.net.depth_encoder.visual_encoder.register_forward_hook(
+                hook_builder(depth_features)
+            )
+
         collected_eps = 0
         with tqdm.tqdm(
             total=self.config.DAGGER.UPDATE_SIZE
         ) as pbar, lmdb.open(
             self.trajectories_env_dir,
             map_size=int(self.config.DAGGER.LMDB_MAP_SIZE),
-        ) as lmdb_env, lmdb_env.begin(
-            write=True
-        ) as txn, torch.no_grad():
+        ) as lmdb_env, torch.no_grad():
             start_id = lmdb_env.stat()["entries"]
+            txn = lmdb_env.begin(write=True)
 
             while collected_eps < self.config.DAGGER.UPDATE_SIZE:
                 for i in range(self.envs.num_envs):
@@ -354,8 +382,41 @@ class DaggerTrainer(BaseRLTrainer):
                         pbar.update()
                         collected_eps += 1
 
+                        if (
+                            collected_eps
+                            % self.config.DAGGER.LMDB_COMMIT_FREQUENCY
+                        ) == 0:
+                            txn.commit()
+                            txn = lmdb_env.begin(write=True)
+
                     if dones[i]:
                         episodes[i] = []
+
+                (
+                    _,
+                    actions,
+                    _,
+                    recurrent_hidden_states,
+                ) = self.actor_critic.act(
+                    batch,
+                    recurrent_hidden_states,
+                    prev_actions,
+                    not_done_masks,
+                    deterministic=False,
+                )
+                actions = torch.where(
+                    torch.rand_like(actions, dtype=torch.float) < beta,
+                    batch["vln_oracle_action_sensor"].long(),
+                    actions,
+                )
+
+                for i in range(self.envs.num_envs):
+                    observations[i]["rgb_features"] = rgb_features[i]
+                    del observations[i]["rgb"]
+
+                    if depth_features is not None:
+                        observations[i]["depth_features"] = depth_features[i]
+                        del observations[i]["depth"]
 
                     episodes[i].append(
                         (
@@ -364,27 +425,6 @@ class DaggerTrainer(BaseRLTrainer):
                             batch["vln_oracle_action_sensor"][i].item(),
                         )
                     )
-
-                if beta < 1.0:
-                    (
-                        _,
-                        actions,
-                        _,
-                        recurrent_hidden_states,
-                    ) = self.actor_critic.act(
-                        batch,
-                        recurrent_hidden_states,
-                        prev_actions,
-                        not_done_masks,
-                        deterministic=False,
-                    )
-                    actions = torch.where(
-                        torch.rand_like(actions, dtype=torch.float) < beta,
-                        batch["vln_oracle_action_sensor"].long(),
-                        actions,
-                    )
-                else:
-                    actions = batch["vln_oracle_action_sensor"].long()
 
                 skips = batch["vln_oracle_action_sensor"].long() == -1
                 actions = torch.where(
@@ -409,8 +449,14 @@ class DaggerTrainer(BaseRLTrainer):
                 )
                 batch = batch_obs(observations, self.device)
 
+            txn.commit()
+
         self.envs.close()
         self.envs = None
+
+        rgb_hook.remove()
+        if depth_hook is not None:
+            depth_hook.remove()
 
     def _update_agent(
         self,
@@ -489,8 +535,9 @@ class DaggerTrainer(BaseRLTrainer):
             for dagger_it in range(self.config.DAGGER.ITERATIONS):
                 step_id = 0
                 self._update_dataset(dagger_it)
-                with torch.cuda.device(self.device):
-                    torch.cuda.empty_cache()
+                if torch.cuda.is_available():
+                    with torch.cuda.device(self.device):
+                        torch.cuda.empty_cache()
                 gc.collect()
 
                 sampler = LengthGroupedSampler(
@@ -511,7 +558,7 @@ class DaggerTrainer(BaseRLTrainer):
                     collate_fn=collate_fn,
                     pin_memory=False,
                     drop_last=True,  # drop last batch if smaller
-                    num_workers=8,
+                    num_workers=3,
                 )
 
                 for epoch in tqdm.trange(self.config.DAGGER.EPOCHS):
@@ -682,12 +729,12 @@ class DaggerTrainer(BaseRLTrainer):
 
         observations = self.envs.reset()
         observations = transform_obs(
-            observations, self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
+            observations, self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID
         )
         batch = batch_obs(observations, self.device)
 
         eval_recurrent_hidden_states = torch.zeros(
-            1,  # num_recurrent_layers
+            self.actor_critic.net.num_recurrent_layers,
             self.config.NUM_PROCESSES,
             self.config.VLN.STATE_ENCODER.hidden_size,
             device=self.device,

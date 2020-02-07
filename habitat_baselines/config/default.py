@@ -105,6 +105,9 @@ _C.DAGGER.UPDATE_SIZE = 20000
 _C.DAGGER.BATCH_SIZE = 5
 _C.DAGGER.P = 0.75
 _C.DAGGER.LMDB_MAP_SIZE = 1e9  # 1GB
+# How often to commit the writes to the DB,
+# less commits is better, but everything must be in memory until a commit happens
+_C.DAGGER.LMDB_COMMIT_FREQUENCY = 500
 _C.DAGGER.USE_IW = False
 # -----------------------------------------------------------------------------
 # VLN CONFIG
@@ -124,6 +127,7 @@ _C.VLN.INSTRUCTION_ENCODER.fine_tune_embeddings = False
 _C.VLN.INSTRUCTION_ENCODER.embedding_size = 200
 _C.VLN.INSTRUCTION_ENCODER.hidden_size = 512
 _C.VLN.INSTRUCTION_ENCODER.rnn_type = "LSTM"
+_C.VLN.INSTRUCTION_ENCODER.final_state_only = True
 _C.VLN.VISUAL_ENCODER = CN()
 # TODO create setting for SimpleCNN to process the combined RGB+Depth image.
 # VISUAL_ENCODER cnn_type must be of 'SimpleRGBCNN' or 'TorchVisionResNet50'
@@ -142,6 +146,9 @@ _C.VLN.DEPTH_ENCODER.ddppo_checkpoint = "NONE"
 _C.VLN.STATE_ENCODER = CN()
 _C.VLN.STATE_ENCODER.hidden_size = 512
 _C.VLN.STATE_ENCODER.rnn_type = "GRU"
+_C.VLN.RCM = CN()
+_C.VLN.RCM.use = False
+_C.VLN.RCM.rcm_state_encoder = True
 # -----------------------------------------------------------------------------
 # ORBSLAM2 BASELINE
 # -----------------------------------------------------------------------------
