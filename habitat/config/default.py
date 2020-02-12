@@ -128,6 +128,11 @@ _C.TASK.VLN_ORACLE_ACTION_SENSOR = CN()
 _C.TASK.VLN_ORACLE_ACTION_SENSOR.TYPE = "VLNOracleActionSensor"
 _C.TASK.VLN_ORACLE_ACTION_SENSOR.GOAL_RADIUS = 0.5
 # -----------------------------------------------------------------------------
+# VLN ORACLE PROGRESS SENSOR
+# -----------------------------------------------------------------------------
+_C.TASK.VLN_ORACLE_PROGRESS_SENSOR = CN()
+_C.TASK.VLN_ORACLE_PROGRESS_SENSOR.TYPE = "VLNOracleProgressSensor"
+# -----------------------------------------------------------------------------
 # SPL MEASUREMENT
 # -----------------------------------------------------------------------------
 _C.TASK.SPL = CN()

@@ -67,3 +67,9 @@ VLN:
     # Use the state encoding model in RCM
     # If false, will just concat inputs and run an RNN over them
     rcm_state_encoder: True
+
+  PROGRESS_MONITOR:
+    # Set to True to use a progress monitor
+    use: False
+    # Progress monitor loss multiplier
+    alpha: 1.0

@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from gym import Space
 
 from habitat import Config
+from habitat_baselines.common.aux_losses import AuxLosses
 from habitat_baselines.common.utils import CategoricalNet, Flatten
 from habitat_baselines.models.instruction_encoder import InstructionEncoder
 from habitat_baselines.models.rcm.rcm_state_encoder import RCMStateEncoder
@@ -164,6 +165,13 @@ class VLNRCMNet(Net):
             "_scale", torch.tensor(1.0 / ((hidden_size // 2) ** 0.5))
         )
 
+        self.progress_monitor = nn.Linear(
+            self.output_size,
+            1,
+        )
+
+        self._init_layers()
+
         self.train()
 
     @property
@@ -182,6 +190,16 @@ class VLNRCMNet(Net):
     @property
     def num_recurrent_layers(self):
         return self.state_encoder.num_recurrent_layers
+
+    def _init_layers(self):
+        nn.init.kaiming_normal_(
+            self.progress_monitor.weight,
+            nonlinearity="tanh",
+        )
+        nn.init.constant_(
+            self.progress_monitor.bias,
+            0,
+        )
 
     def _attn(self, q, k, v, mask=None):
         logits = torch.einsum("nc, nci -> ni", q, k)
@@ -250,6 +268,19 @@ class VLNRCMNet(Net):
             [state, text_embedding, rgb_embedding, depth_embedding], dim=1
         )
 
+        if self.vln_config.PROGRESS_MONITOR.use and AuxLosses.is_active():
+            progress_hat = torch.tanh(self.progress_monitor(x))
+            progress_loss = F.mse_loss(
+                progress_hat.squeeze(1),
+                observations['progress'],
+                reduction='none',
+            )
+            AuxLosses.register_loss(
+                "progress_monitor",
+                progress_loss,
+                self.vln_config.PROGRESS_MONITOR.alpha,
+            )
+
         return x, rnn_hidden_states
 
 
@@ -295,6 +326,7 @@ if __name__ == "__main__":
         rgb=torch.randn(4 * 2, 224, 224, 3, device=device),
         depth=torch.randn(4 * 2, 256, 256, 1, device=device),
         instruction=dummy_instruction,
+        progress=torch.randn(4 * 2, 1, device=device),
     )
 
     hidden_states = torch.randn(
@@ -305,6 +337,8 @@ if __name__ == "__main__":
     )
     prev_actions = torch.randint(0, 3, size=(4 * 2, 1), device=device)
     masks = torch.ones(4 * 2, 1, device=device)
+
+    AuxLosses.activate()
 
     policy.evaluate_actions(
         obs, hidden_states, prev_actions, masks, prev_actions

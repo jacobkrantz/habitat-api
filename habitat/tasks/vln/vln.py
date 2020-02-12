@@ -131,6 +131,43 @@ class VLNOracleActionSensor(Sensor):
         )
 
 
+@registry.register_sensor
+class VLNOracleProgressSensor(Sensor):
+    r"""Sensor for observing how much progress has been made towards the goal.
+
+    Args:
+        sim: reference to the simulator for calculating task observations.
+        config: config for the sensor.
+    """
+
+    def __init__(self, sim, config, *args: Any, **kwargs: Any):
+        self._sim = sim
+        super().__init__(config=config)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "progress"
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        # TODO: what is the correct sensor type?
+        return SensorTypes.MEASUREMENT
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        return spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float)
+
+    def get_observation(
+        self, observations, *args: Any, episode, **kwargs: Any
+    ):
+        current_position = self._sim.get_agent_state().position.tolist()
+
+        distance_to_target = self._sim.geodesic_distance(
+            current_position, episode.goals[0].position
+        )
+
+        distance_from_start = episode.info["geodesic_distance"]
+
+        return (distance_from_start - distance_to_target) / distance_from_start
+
+
 @registry.register_measure
 class PathLength(Measure):
     r"""Path Length (PL)

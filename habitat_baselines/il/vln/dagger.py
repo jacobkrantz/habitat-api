@@ -21,6 +21,7 @@ from habitat_baselines.common.env_utils import (
     construct_envs,
     construct_envs_auto_reset_false,
 )
+from habitat_baselines.common.aux_losses import AuxLosses
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
 from habitat_baselines.common.utils import batch_obs, transform_obs
@@ -476,6 +477,8 @@ class DaggerTrainer(BaseRLTrainer):
             device=self.device,
         )
 
+        AuxLosses.clear()
+
         distribution = self.actor_critic.build_distribution(
             observations, recurrent_hidden_states, prev_actions, not_done_masks
         )
@@ -483,15 +486,24 @@ class DaggerTrainer(BaseRLTrainer):
         logits = distribution.logits
         logits = logits.view(T, N, -1)
 
-        loss = F.cross_entropy(
+        action_loss = F.cross_entropy(
             logits.permute(0, 2, 1), corrected_actions, reduction="none"
         )
-        loss = ((weights * loss).sum(0) / weights.sum(0)).mean()
+        action_loss = ((weights * action_loss).sum(0) / weights.sum(0)).mean()
+
+        aux_mask = (weights > 0).view(-1)
+        aux_loss = AuxLosses.reduce(aux_mask)
+
+        loss = action_loss + aux_loss
         loss.backward()
 
         self.optimizer.step()
 
-        return loss.item()
+        if isinstance(aux_loss, torch.Tensor):
+            return loss.item(), action_loss.item(), aux_loss.item()
+        else:
+            return loss.item(), action_loss.item(), aux_loss
+
 
     def train(self) -> None:
         r"""Main method for training DAgger.
@@ -561,6 +573,8 @@ class DaggerTrainer(BaseRLTrainer):
                     num_workers=3,
                 )
 
+
+                AuxLosses.activate()
                 for epoch in tqdm.trange(self.config.DAGGER.EPOCHS):
                     for batch in tqdm.tqdm(
                         diter, total=len(diter), leave=False
@@ -578,7 +592,7 @@ class DaggerTrainer(BaseRLTrainer):
                         }
 
                         try:
-                            loss = self._update_agent(
+                            loss, action_loss, aux_loss = self._update_agent(
                                 observations_batch,
                                 prev_actions_batch.to(
                                     device=self.device, non_blocking=True
@@ -597,7 +611,7 @@ class DaggerTrainer(BaseRLTrainer):
                             logger.info(
                                 "ERROR: failed to update agent. Updating agent with batch size of 1."
                             )
-                            loss = 0
+                            loss, action_loss, aux_loss = 0, 0, 0
                             prev_actions_batch = prev_actions_batch.cpu()
                             not_done_masks = not_done_masks.cpu()
                             corrected_actions_batch = (
@@ -609,7 +623,7 @@ class DaggerTrainer(BaseRLTrainer):
                                 for k, v in observations_batch.items()
                             }
                             for i in range(not_done_masks.size(0)):
-                                loss += self._update_agent(
+                                output = self._update_agent(
                                     {
                                         k: v[i].to(
                                             device=self.device,
@@ -630,8 +644,13 @@ class DaggerTrainer(BaseRLTrainer):
                                         device=self.device, non_blocking=True
                                     ),
                                 )
+                                loss += output[0]
+                                action_loss += output[1]
+                                aux_loss += output[2]
 
                         logger.info(f"train_loss: {loss}")
+                        logger.info(f"train_action_loss: {action_loss}")
+                        logger.info(f"train_aux_loss: {aux_loss}")
                         logger.info(f"Batches processed: {step_id}.")
                         logger.info(
                             f"On DAgger iter {dagger_it}, Epoch {epoch}."
@@ -639,11 +658,18 @@ class DaggerTrainer(BaseRLTrainer):
                         writer.add_scalar(
                             f"train_loss_iter_{dagger_it}", loss, step_id
                         )
+                        writer.add_scalar(
+                            f"train_action_loss_iter_{dagger_it}", action_loss, step_id
+                        )
+                        writer.add_scalar(
+                            f"train_aux_loss_iter_{dagger_it}", aux_loss, step_id
+                        )
                         step_id += 1
 
                     self.save_checkpoint(
                         f"ckpt.{dagger_it * self.config.DAGGER.EPOCHS + epoch}.pth"
                     )
+                AuxLosses.deactivate()
 
     @staticmethod
     def _pause_envs(
