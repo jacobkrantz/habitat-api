@@ -504,7 +504,6 @@ class DaggerTrainer(BaseRLTrainer):
         else:
             return loss.item(), action_loss.item(), aux_loss
 
-
     def train(self) -> None:
         r"""Main method for training DAgger.
 
@@ -518,6 +517,15 @@ class DaggerTrainer(BaseRLTrainer):
             map_size=int(self.config.DAGGER.LMDB_MAP_SIZE),
         ) as lmdb_env, lmdb_env.begin(write=True) as txn:
             txn.drop(lmdb_env.open_db())
+
+        self.config.defrost()
+        self.config.TASK_CONFIG.TASK.NDTW.SPLIT = (
+            self.config.TASK_CONFIG.DATASET.SPLIT
+        )
+        self.config.TASK_CONFIG.TASK.SDTW.SPLIT = (
+            self.config.TASK_CONFIG.DATASET.SPLIT
+        )
+        self.config.freeze()
 
         self.envs = construct_envs(
             self.config, get_env_class(self.config.ENV_NAME)
@@ -572,7 +580,6 @@ class DaggerTrainer(BaseRLTrainer):
                     drop_last=True,  # drop last batch if smaller
                     num_workers=3,
                 )
-
 
                 AuxLosses.activate()
                 for epoch in tqdm.trange(self.config.DAGGER.EPOCHS):
@@ -659,10 +666,14 @@ class DaggerTrainer(BaseRLTrainer):
                             f"train_loss_iter_{dagger_it}", loss, step_id
                         )
                         writer.add_scalar(
-                            f"train_action_loss_iter_{dagger_it}", action_loss, step_id
+                            f"train_action_loss_iter_{dagger_it}",
+                            action_loss,
+                            step_id,
                         )
                         writer.add_scalar(
-                            f"train_aux_loss_iter_{dagger_it}", aux_loss, step_id
+                            f"train_aux_loss_iter_{dagger_it}",
+                            aux_loss,
+                            step_id,
                         )
                         step_id += 1
 
@@ -732,6 +743,8 @@ class DaggerTrainer(BaseRLTrainer):
 
         config.defrost()
         config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
+        config.TASK_CONFIG.TASK.NDTW.SPLIT = config.EVAL.SPLIT
+        config.TASK_CONFIG.TASK.SDTW.SPLIT = config.EVAL.SPLIT
         config.freeze()
 
         if len(self.config.VIDEO_OPTION) > 0:
@@ -895,4 +908,4 @@ class DaggerTrainer(BaseRLTrainer):
         checkpoint_num = checkpoint_index + 1
         for k, v in aggregated_stats.items():
             logger.info(f"Average episode {k}: {v:.6f}")
-            writer.add_scalar(f"eval_{k}", v, checkpoint_num)
+            writer.add_scalar(f"eval_{split}_{k}", v, checkpoint_num)
