@@ -741,10 +741,18 @@ class DaggerTrainer(BaseRLTrainer):
         else:
             config = self.config.clone()
 
+        if config.NUM_PROCESSES > 1:
+            logger.info("Changing NUM_PROCESSES to 1 for complete eval.")
+
         config.defrost()
         config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
         config.TASK_CONFIG.TASK.NDTW.SPLIT = config.EVAL.SPLIT
         config.TASK_CONFIG.TASK.SDTW.SPLIT = config.EVAL.SPLIT
+        config.TASK_CONFIG.ENVIRONMENT.ITERATOR_OPTIONS.SHUFFLE = False
+        config.TASK_CONFIG.ENVIRONMENT.ITERATOR_OPTIONS.MAX_SCENE_REPEAT_STEPS = -1
+        # Only evaluate using 1 process until we have a better fix.
+        # Problem: Not all episodes are evaluated when multiples processes are used.
+        config.NUM_PROCESSES = 1
         config.freeze()
 
         if len(self.config.VIDEO_OPTION) > 0:
@@ -905,6 +913,7 @@ class DaggerTrainer(BaseRLTrainer):
         with open(f"stats_episodes_{checkpoint_index}_{split}.json", "w") as f:
             json.dump(aggregated_stats, f, indent=4)
 
+        logger.info(f"Episodes evaluated: {num_episodes}")
         checkpoint_num = checkpoint_index + 1
         for k, v in aggregated_stats.items():
             logger.info(f"Average episode {k}: {v:.6f}")

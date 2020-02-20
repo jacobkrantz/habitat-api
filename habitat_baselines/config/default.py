@@ -149,6 +149,9 @@ _C.VLN.STATE_ENCODER.rnn_type = "GRU"
 _C.VLN.RCM = CN()
 _C.VLN.RCM.use = False
 _C.VLN.RCM.rcm_state_encoder = True
+_C.VLN.PROGRESS_MONITOR = CN()
+_C.VLN.PROGRESS_MONITOR.use = False
+_C.VLN.PROGRESS_MONITOR.alpha = 1.0  # loss multiplier
 # -----------------------------------------------------------------------------
 # ORBSLAM2 BASELINE
 # -----------------------------------------------------------------------------
