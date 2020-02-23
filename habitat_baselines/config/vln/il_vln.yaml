@@ -6,7 +6,7 @@ SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID: 0
 TENSORBOARD_DIR: tensorboard_dirs/debug
 # using compressed meshes, 8 procs fit on a single 1080 Ti GPU.
-NUM_PROCESSES: 1
+NUM_PROCESSES: 8
 CHECKPOINT_FOLDER: data/checkpoints/vln/debug
 # if file, eval just that checkpoint.
 EVAL_CKPT_PATH_DIR: data/checkpoints/vln/debug
@@ -21,14 +21,14 @@ EVAL:
 DAGGER:
   LR: 2.5e-4
   # set to 1 for student forcing and teacher forcing
-  ITERATIONS: 4
-  EPOCHS: 6
+  ITERATIONS: 10
+  EPOCHS: 4
   UPDATE_SIZE: 5000
-  BATCH_SIZE: 2
+  BATCH_SIZE: 5
   # Student forcing: set to 0.0
   # Teacher forcing: set to 1.0
   # DAgger: 0.0 < P < 1.0
-  P: 1.0
+  P: 0.75
   USE_IW: True
   # ~1.5TB (in bytes)
   # 4 iterations of 5K update_size -> 1TB dataset
@@ -66,7 +66,7 @@ VLN:
     use: False
     # Use the state encoding model in RCM
     # If false, will just concat inputs and run an RNN over them
-    rcm_state_encoder: True
+    rcm_state_encoder: False
 
   PROGRESS_MONITOR:
     # Set to True to use a progress monitor

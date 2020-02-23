@@ -15,13 +15,13 @@ import torch.nn.functional as F
 import tqdm
 
 from habitat import Config, logger
+from habitat_baselines.common.aux_losses import AuxLosses
 from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.env_utils import (
     construct_envs,
     construct_envs_auto_reset_false,
 )
-from habitat_baselines.common.aux_losses import AuxLosses
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
 from habitat_baselines.common.utils import batch_obs, transform_obs
@@ -119,63 +119,81 @@ def collate_fn(batch):
     )
 
 
-class LengthGroupedSampler(torch.utils.data.Sampler):
-    def __init__(self, lengths, batch_size):
-        self.lengths = lengths
-        self.sort_priority = list(range(len(self.lengths)))
-        self.sorted_ordering = list(range(len(self.lengths)))
+def _block_shuffle(lst, block_size):
+    blocks = [lst[i : i + block_size] for i in range(0, len(lst), block_size)]
+    random.shuffle(blocks)
 
-        self.batch_size = batch_size
-        self.shuffling = list(range(len(self.lengths) // self.batch_size))
-
-    def __iter__(self):
-        random.shuffle(self.sort_priority)
-        self.sorted_ordering.sort(
-            key=lambda k: (int(self.lengths[k] / 1.1), self.sort_priority[k]),
-            reverse=True,
-        )
-        random.shuffle(self.shuffling)
-        for index in self.shuffling:
-            for bid in range(self.batch_size):
-                yield self.sorted_ordering[index * self.batch_size + bid]
-
-    def __len__(self):
-        return len(self.shuffling) * self.batch_size
+    return [ele for block in blocks for ele in block]
 
 
-class IWTrajectoryDataset(torch.utils.data.Dataset):
+class IWTrajectoryDataset(torch.utils.data.IterableDataset):
     def __init__(
         self,
         trajectories_env_dir,
-        length,
         use_iw,
         inflection_weight_coef=1.0,
-        lmbd_map_size=1e9,
+        lmdb_map_size=1e9,
+        batch_size=1,
     ):
         super().__init__()
         self.trajectories_env_dir = trajectories_env_dir
-        self.lmdb_env = None
-        self.length = length
-        self.lmbd_map_size = lmbd_map_size
+        self.lmdb_map_size = lmdb_map_size
+        self.preload_size = batch_size * 100
+        self._preload = []
+        self.batch_size = batch_size
 
         if use_iw:
             self.inflec_weights = torch.tensor([1.0, inflection_weight_coef])
         else:
             self.inflec_weights = torch.tensor([1.0, 1.0])
 
-    def __getitem__(self, index):
-        if self.lmdb_env is None:
-            self.lmdb_env = lmdb.open(
+        with lmdb.open(
+            self.trajectories_env_dir,
+            map_size=int(self.lmdb_map_size),
+            readonly=True,
+            lock=False,
+        ) as lmdb_env:
+            self.length = lmdb_env.stat()["entries"]
+
+    def _load_next(self):
+        if len(self._preload) == 0:
+            if len(self.load_ordering) == 0:
+                raise StopIteration
+
+            new_preload = []
+            lengths = []
+            with lmdb.open(
                 self.trajectories_env_dir,
-                map_size=int(self.lmbd_map_size),
+                map_size=int(self.lmdb_map_size),
                 readonly=True,
                 lock=False,
-            )
+            ) as lmdb_env, lmdb_env.begin(buffers=True) as txn:
+                for _ in range(self.preload_size):
+                    if len(self.load_ordering) == 0:
+                        break
 
-        with self.lmdb_env.begin(buffers=True) as txn:
-            obs, prev_actions, oracle_actions = msgpack_numpy.unpackb(
-                txn.get(str(index).encode()), raw=False
-            )
+                    new_preload.append(
+                        msgpack_numpy.unpackb(
+                            txn.get(str(self.load_ordering.pop()).encode()),
+                            raw=False,
+                        )
+                    )
+
+                    lengths.append(len(new_preload[-1][0]))
+
+            sort_priority = list(range(len(lengths)))
+            random.shuffle(sort_priority)
+
+            sorted_ordering = list(range(len(lengths)))
+            sorted_ordering.sort(key=lambda k: (lengths[k], sort_priority[k]))
+
+            for idx in _block_shuffle(sorted_ordering, self.batch_size):
+                self._preload.append(new_preload[idx])
+
+        return self._preload.pop()
+
+    def __next__(self):
+        obs, prev_actions, oracle_actions = self._load_next()
 
         for k, v in obs.items():
             obs[k] = torch.from_numpy(v)
@@ -197,8 +215,25 @@ class IWTrajectoryDataset(torch.utils.data.Dataset):
             self.inflec_weights[inflections],
         )
 
-    def __len__(self):
-        return self.length
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:
+            start = 0
+            end = self.length
+        else:
+            per_worker = int(np.ceil(self.length / worker_info.num_workers))
+
+            start = per_worker * worker_info.id
+            end = min(start + per_worker, self.length)
+
+        # Reverse so we can use .pop()
+        self.load_ordering = list(
+            reversed(
+                _block_shuffle(list(range(start, end)), self.preload_size)
+            )
+        )
+
+        return self
 
 
 @baseline_registry.register_trainer(name="dagger")
@@ -216,10 +251,17 @@ class DaggerTrainer(BaseRLTrainer):
             else torch.device("cpu")
         )
 
-        self.trajectory_lengths = []
         self.trajectories_env_dir = (
             f"trajectories_dirs/{self.config.RUN_NAME}/trajectories.lmdb"
         )
+
+        job_id = os.environ.get("SLURM_JOBID", 0)
+        slurm_tmp = f"/scratch/slurm_tmpdir/{job_id}"
+
+        if os.path.exists(slurm_tmp):
+            self.trajectories_env_dir = os.path.join(
+                slurm_tmp, "trajectories.lmdb"
+            )
 
     def _setup_actor_critic_agent(self, config: Config) -> None:
         r"""Sets up actor critic and agent.
@@ -379,7 +421,6 @@ class DaggerTrainer(BaseRLTrainer):
                             ),
                         )
 
-                        self.trajectory_lengths.append(len(ep))
                         pbar.update()
                         collected_eps += 1
 
@@ -436,7 +477,9 @@ class DaggerTrainer(BaseRLTrainer):
                 prev_actions.copy_(actions)
 
                 outputs = self.envs.step([a[0].item() for a in actions])
-                observations, _, dones, _ = [list(x) for x in zip(*outputs)]
+                observations, rewards, dones, _ = [
+                    list(x) for x in zip(*outputs)
+                ]
 
                 not_done_masks = torch.tensor(
                     [[0.0] if done else [1.0] for done in dones],
@@ -560,21 +603,17 @@ class DaggerTrainer(BaseRLTrainer):
                         torch.cuda.empty_cache()
                 gc.collect()
 
-                sampler = LengthGroupedSampler(
-                    self.trajectory_lengths, self.config.DAGGER.BATCH_SIZE
-                )
                 dataset = IWTrajectoryDataset(
                     self.trajectories_env_dir,
-                    len(self.trajectory_lengths),
                     self.config.DAGGER.USE_IW,
                     inflection_weight_coef=self.config.VLN.inflection_weight_coef,
-                    lmbd_map_size=self.config.DAGGER.LMDB_MAP_SIZE,
+                    lmdb_map_size=self.config.DAGGER.LMDB_MAP_SIZE,
+                    batch_size=self.config.DAGGER.BATCH_SIZE,
                 )
                 diter = torch.utils.data.DataLoader(
                     dataset,
                     batch_size=self.config.DAGGER.BATCH_SIZE,
                     shuffle=False,
-                    sampler=sampler,
                     collate_fn=collate_fn,
                     pin_memory=False,
                     drop_last=True,  # drop last batch if smaller
@@ -584,7 +623,9 @@ class DaggerTrainer(BaseRLTrainer):
                 AuxLosses.activate()
                 for epoch in tqdm.trange(self.config.DAGGER.EPOCHS):
                     for batch in tqdm.tqdm(
-                        diter, total=len(diter), leave=False
+                        diter,
+                        total=dataset.length // dataset.batch_size,
+                        leave=False,
                     ):
                         (
                             observations_batch,
@@ -746,7 +787,9 @@ class DaggerTrainer(BaseRLTrainer):
         config.TASK_CONFIG.TASK.NDTW.SPLIT = config.EVAL.SPLIT
         config.TASK_CONFIG.TASK.SDTW.SPLIT = config.EVAL.SPLIT
         config.TASK_CONFIG.ENVIRONMENT.ITERATOR_OPTIONS.SHUFFLE = False
-        config.TASK_CONFIG.ENVIRONMENT.ITERATOR_OPTIONS.MAX_SCENE_REPEAT_STEPS = -1
+        config.TASK_CONFIG.ENVIRONMENT.ITERATOR_OPTIONS.MAX_SCENE_REPEAT_STEPS = (
+            -1
+        )
         config.freeze()
 
         if len(self.config.VIDEO_OPTION) > 0:
