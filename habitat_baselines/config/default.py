@@ -109,6 +109,9 @@ _C.DAGGER.LMDB_MAP_SIZE = 1e9  # 1GB
 # less commits is better, but everything must be in memory until a commit happens
 _C.DAGGER.LMDB_COMMIT_FREQUENCY = 500
 _C.DAGGER.USE_IW = False
+# If True, load precomputed features directly from TF_TRAJECTORY_DIR.
+_C.DAGGER.TF_PRELOAD_FEATURES = False
+_C.DAGGER.TF_TRAJECTORY_DIR = "trajectories_dirs/tf_{split}/trajectories.lmdb"
 # -----------------------------------------------------------------------------
 # VLN CONFIG
 # -----------------------------------------------------------------------------

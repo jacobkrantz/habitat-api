@@ -165,10 +165,7 @@ class VLNRCMNet(Net):
             "_scale", torch.tensor(1.0 / ((hidden_size // 2) ** 0.5))
         )
 
-        self.progress_monitor = nn.Linear(
-            self.output_size,
-            1,
-        )
+        self.progress_monitor = nn.Linear(self.output_size, 1)
 
         self._init_layers()
 
@@ -193,13 +190,9 @@ class VLNRCMNet(Net):
 
     def _init_layers(self):
         nn.init.kaiming_normal_(
-            self.progress_monitor.weight,
-            nonlinearity="tanh",
+            self.progress_monitor.weight, nonlinearity="tanh"
         )
-        nn.init.constant_(
-            self.progress_monitor.bias,
-            0,
-        )
+        nn.init.constant_(self.progress_monitor.bias, 0)
 
     def _attn(self, q, k, v, mask=None):
         logits = torch.einsum("nc, nci -> ni", q, k)
@@ -272,8 +265,8 @@ class VLNRCMNet(Net):
             progress_hat = torch.tanh(self.progress_monitor(x))
             progress_loss = F.mse_loss(
                 progress_hat.squeeze(1),
-                observations['progress'],
-                reduction='none',
+                observations["progress"],
+                reduction="none",
             )
             AuxLosses.register_loss(
                 "progress_monitor",

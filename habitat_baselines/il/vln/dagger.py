@@ -251,17 +251,21 @@ class DaggerTrainer(BaseRLTrainer):
             else torch.device("cpu")
         )
 
-        self.trajectories_env_dir = (
-            f"trajectories_dirs/{self.config.RUN_NAME}/trajectories.lmdb"
-        )
-
-        job_id = os.environ.get("SLURM_JOBID", 0)
-        slurm_tmp = f"/scratch/slurm_tmpdir/{job_id}"
-
-        if os.path.exists(slurm_tmp):
-            self.trajectories_env_dir = os.path.join(
-                slurm_tmp, "trajectories.lmdb"
+        if config.DAGGER.TF_PRELOAD_FEATURES:
+            self.trajectories_env_dir = self.config.DAGGER.TF_TRAJECTORY_DIR.format(
+                split=config.TASK_CONFIG.DATASET.SPLIT
             )
+        else:
+            self.trajectories_env_dir = (
+                f"trajectories_dirs/{self.config.RUN_NAME}/trajectories.lmdb"
+            )
+            job_id = os.environ.get("SLURM_JOBID", 0)
+            slurm_tmp = f"/scratch/slurm_tmpdir/{job_id}"
+
+            if os.path.exists(slurm_tmp):
+                self.trajectories_env_dir = os.path.join(
+                    slurm_tmp, "trajectories.lmdb"
+                )
 
     def _setup_actor_critic_agent(self, config: Config) -> None:
         r"""Sets up actor critic and agent.
@@ -368,6 +372,8 @@ class DaggerTrainer(BaseRLTrainer):
         else:
             beta = self.config.DAGGER.P ** data_it
 
+        ensure_unique_episodes = beta == 1.0
+
         def hook_builder(tgt_tensor):
             def hook(m, i, o):
                 tgt_tensor.set_(o.cpu())
@@ -388,6 +394,11 @@ class DaggerTrainer(BaseRLTrainer):
             )
 
         collected_eps = 0
+        if ensure_unique_episodes:
+            ep_ids_collected = set(
+                [ep.episode_id for ep in self.envs.current_episodes()]
+            )
+
         with tqdm.tqdm(
             total=self.config.DAGGER.UPDATE_SIZE
         ) as pbar, lmdb.open(
@@ -398,6 +409,10 @@ class DaggerTrainer(BaseRLTrainer):
             txn = lmdb_env.begin(write=True)
 
             while collected_eps < self.config.DAGGER.UPDATE_SIZE:
+                if ensure_unique_episodes:
+                    envs_to_pause = []
+                    current_episodes = self.envs.current_episodes()
+
                 for i in range(self.envs.num_envs):
                     if dones[i] and not skips[i]:
                         ep = episodes[i]
@@ -431,8 +446,37 @@ class DaggerTrainer(BaseRLTrainer):
                             txn.commit()
                             txn = lmdb_env.begin(write=True)
 
+                        if ensure_unique_episodes:
+                            if (
+                                current_episodes[i].episode_id
+                                in ep_ids_collected
+                            ):
+                                envs_to_pause.append(i)
+                            else:
+                                ep_ids_collected.add(
+                                    current_episodes[i].episode_id
+                                )
+
                     if dones[i]:
                         episodes[i] = []
+
+                if ensure_unique_episodes:
+                    (
+                        self.envs,
+                        recurrent_hidden_states,
+                        not_done_masks,
+                        prev_actions,
+                        batch,
+                    ) = self._pause_envs(
+                        envs_to_pause,
+                        self.envs,
+                        recurrent_hidden_states,
+                        not_done_masks,
+                        prev_actions,
+                        batch,
+                    )
+                    if self.envs.num_envs == 0:
+                        break
 
                 (
                     _,
@@ -555,11 +599,20 @@ class DaggerTrainer(BaseRLTrainer):
         """
         os.makedirs(self.trajectories_env_dir, exist_ok=True)
 
-        with lmdb.open(
-            self.trajectories_env_dir,
-            map_size=int(self.config.DAGGER.LMDB_MAP_SIZE),
-        ) as lmdb_env, lmdb_env.begin(write=True) as txn:
-            txn.drop(lmdb_env.open_db())
+        if self.config.DAGGER.TF_PRELOAD_FEATURES:
+            try:
+                lmdb.open(self.trajectories_env_dir, readonly=True)
+            except lmdb.Error as err:
+                logger.error(
+                    "Cannot open database for teacher forcing preload."
+                )
+                raise err
+        else:
+            with lmdb.open(
+                self.trajectories_env_dir,
+                map_size=int(self.config.DAGGER.LMDB_MAP_SIZE),
+            ) as lmdb_env, lmdb_env.begin(write=True) as txn:
+                txn.drop(lmdb_env.open_db())
 
         self.config.defrost()
         self.config.TASK_CONFIG.TASK.NDTW.SPLIT = (
@@ -568,6 +621,11 @@ class DaggerTrainer(BaseRLTrainer):
         self.config.TASK_CONFIG.TASK.SDTW.SPLIT = (
             self.config.TASK_CONFIG.DATASET.SPLIT
         )
+        # if doing teacher forcing, don't switch the scene until it is complete
+        if self.config.DAGGER.P == 1.0:
+            self.config.TASK_CONFIG.ENVIRONMENT.ITERATOR_OPTIONS.MAX_SCENE_REPEAT_STEPS = (
+                -1
+            )
         self.config.freeze()
 
         self.envs = construct_envs(
@@ -590,6 +648,11 @@ class DaggerTrainer(BaseRLTrainer):
             )
         )
 
+        if self.config.DAGGER.TF_PRELOAD_FEATURES:
+            self.envs.close()
+            del self.envs
+            self.envs = None
+
         with TensorboardWriter(
             self.config.TENSORBOARD_DIR,
             flush_secs=self.flush_secs,
@@ -597,7 +660,9 @@ class DaggerTrainer(BaseRLTrainer):
         ) as writer:
             for dagger_it in range(self.config.DAGGER.ITERATIONS):
                 step_id = 0
-                self._update_dataset(dagger_it)
+                if not self.config.DAGGER.TF_PRELOAD_FEATURES:
+                    self._update_dataset(dagger_it)
+
                 if torch.cuda.is_available():
                     with torch.cuda.device(self.device):
                         torch.cuda.empty_cache()
