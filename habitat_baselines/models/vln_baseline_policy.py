@@ -27,7 +27,9 @@ class VLNBaselinePolicy(Policy):
     ):
         super().__init__(
             VLNBaselineNet(
-                observation_space=observation_space, vln_config=vln_config
+                observation_space=observation_space,
+                vln_config=vln_config,
+                num_actions=action_space.n,
             ),
             action_space.n,
         )
@@ -45,7 +47,9 @@ class VLNBaselineNet(Net):
         RNN state decoder
     """
 
-    def __init__(self, observation_space: Space, vln_config: Config):
+    def __init__(
+        self, observation_space: Space, vln_config: Config, num_actions
+    ):
         super().__init__()
         self.vln_config = vln_config
 
@@ -94,10 +98,18 @@ class VLNBaselineNet(Net):
                 activation=vln_config.VISUAL_ENCODER.activation,
             )
 
+        if vln_config.BASELINE.use_prev_action:
+            self.prev_action_embedding = nn.Embedding(num_actions + 1, 32)
+
         # Init the RNN state decoder
-        rnn_input_size = self.instruction_encoder.output_size
-        rnn_input_size += vln_config.DEPTH_ENCODER.output_size
-        rnn_input_size += vln_config.VISUAL_ENCODER.output_size
+        rnn_input_size = (
+            self.instruction_encoder.output_size
+            + vln_config.DEPTH_ENCODER.output_size
+            + vln_config.VISUAL_ENCODER.output_size
+        )
+
+        if vln_config.BASELINE.use_prev_action:
+            rnn_input_size += self.prev_action_embedding.embedding_dim
 
         self.state_encoder = RNNStateEncoder(
             input_size=rnn_input_size,
@@ -145,6 +157,13 @@ class VLNBaselineNet(Net):
         x = torch.cat(
             [instruction_embedding, depth_embedding, rgb_embedding], dim=1
         )
+
+        if self.vln_config.BASELINE.use_prev_action:
+            prev_actions_embedding = self.prev_action_embedding(
+                ((prev_actions.float() + 1) * masks).long().view(-1)
+            )
+            x = torch.cat([x, prev_actions_embedding], dim=1)
+
         x, rnn_hidden_states = self.state_encoder(x, rnn_hidden_states, masks)
 
         if self.vln_config.PROGRESS_MONITOR.use and AuxLosses.is_active():

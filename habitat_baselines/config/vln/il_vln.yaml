@@ -38,6 +38,7 @@ DAGGER:
   # ~1.5TB (in bytes)
   # 4 iterations of 5K update_size -> 1TB dataset
   LMDB_MAP_SIZE: 1.65e+12
+  TF_PRELOAD_FEATURES: False
 
 VLN:
   inflection_weight_coef: 3.2
@@ -65,6 +66,9 @@ VLN:
     hidden_size: 512
     # Currently only works with GRU
     rnn_type: GRU
+
+  BASELINE:
+    use_prev_action: False
 
   RCM:
     # Set to True to use the RCM model
