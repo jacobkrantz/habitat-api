@@ -24,7 +24,11 @@ from habitat.core.registry import registry
 from habitat.core.simulator import Observations, Sensor, SensorTypes, Simulator
 from habitat.core.utils import not_none_validator
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
-from habitat.tasks.nav.nav import NavigationEpisode, NavigationTask
+from habitat.tasks.nav.nav import (
+    NavigationEpisode,
+    NavigationGoal,
+    NavigationTask,
+)
 from habitat.tasks.nav.shortest_path_follower import ShortestPathFollower
 
 
@@ -52,7 +56,9 @@ class VLNEpisode(NavigationEpisode):
             path to the goal that aligns with the instruction.
         instruction: single natural language instruction guide to goal.
         trajectory_id: id of ground truth trajectory path.
+        instruction_index_string: optional identifier of instruction.
     """
+    goals: List[NavigationGoal] = attr.ib(default=None)
     reference_path: List[List[float]] = attr.ib(
         default=None, validator=not_none_validator
     )
@@ -60,6 +66,7 @@ class VLNEpisode(NavigationEpisode):
         default=None, validator=not_none_validator
     )
     trajectory_id: int = attr.ib(default=None, validator=not_none_validator)
+    instruction_index_string: str = attr.ib(default=None)
 
 
 @registry.register_sensor(name="InstructionSensor")
@@ -81,6 +88,7 @@ class InstructionSensor(Sensor):
             "text": episode.instruction.instruction_text,
             "tokens": episode.instruction.instruction_tokens,
             "trajectory_id": episode.trajectory_id,
+            "instruction_index_string": episode.instruction_index_string,
         }
 
     def get_observation(self, **kwargs):

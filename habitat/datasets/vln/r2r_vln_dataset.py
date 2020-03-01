@@ -74,6 +74,7 @@ class VLNDatasetV1(Dataset):
                 episode.scene_id = os.path.join(scenes_dir, episode.scene_id)
 
             episode.instruction = InstructionData(**episode.instruction)
-            for g_index, goal in enumerate(episode.goals):
-                episode.goals[g_index] = NavigationGoal(**goal)
+            if episode.goals is not None:
+                for g_index, goal in enumerate(episode.goals):
+                    episode.goals[g_index] = NavigationGoal(**goal)
             self.episodes.append(episode)

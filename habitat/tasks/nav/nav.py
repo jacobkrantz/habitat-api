@@ -374,6 +374,47 @@ class EpisodicGPSSensor(Sensor):
             return agent_position.astype(np.float32)
 
 
+@registry.register_sensor(name="GlobalGPSSensor")
+class GlobalGPSSensor(Sensor):
+    r"""The agents current location in the global coordinate frame
+
+    Args:
+        sim: reference to the simulator for calculating task observations.
+        config: Contains the DIMENSIONALITY field for the number of dimensions
+                to express the agents position
+    Attributes:
+        _dimensionality: number of dimensions used to specify the agents position
+    """
+
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
+        self._sim = sim
+        self._dimensionality = getattr(config, "DIMENSIONALITY", 2)
+        assert self._dimensionality in [2, 3]
+        super().__init__(config=config)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "globalgps"
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.POSITION
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        return spaces.Box(
+            low=np.finfo(np.float32).min,
+            high=np.finfo(np.float32).max,
+            shape=(self._dimensionality,),
+            dtype=np.float32,
+        )
+
+    def get_observation(
+        self, *args: Any, observations, episode, **kwargs: Any
+    ):
+        agent_position = self._sim.get_agent_state().position
+        return agent_position.astype(np.float32)
+
+
 @registry.register_sensor
 class ProximitySensor(Sensor):
     r"""Sensor for observing the distance to the closest obstacle

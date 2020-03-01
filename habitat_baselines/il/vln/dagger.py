@@ -1,3 +1,4 @@
+import copy
 import gc
 import json
 import os
@@ -821,6 +822,182 @@ class DaggerTrainer(BaseRLTrainer):
             prev_actions,
             batch,
         )
+
+    def _test_checkpoint(
+        self, checkpoint_path: str, checkpoint_index: int = 0
+    ) -> None:
+        r"""Generates trajectories for a single checkpoint.
+
+        Args:
+            checkpoint_path: path of checkpoint
+            checkpoint_index: index of cur checkpoint for logging
+
+        Returns:
+            None
+        """
+
+        def trajectory_step_from_obs(obs: Dict) -> (str, Dict):
+            """Returns a key value pair
+            """
+            path_id = obs["instruction"]["trajectory_id"]
+            k = (
+                str(path_id)
+                + "_"
+                + obs["instruction"]["instruction_index_string"]
+            )
+            return (
+                k,
+                {
+                    "position": obs["globalgps"].tolist(),
+                    "heading": obs["heading"].item(),
+                },
+            )
+
+        logger.info(f"checkpoint_path: {checkpoint_path}")
+        ckpt_dict = self.load_checkpoint(checkpoint_path, map_location="cpu")
+
+        if self.config.EVAL.USE_CKPT_CONFIG:
+            config = self._setup_eval_config(ckpt_dict["config"])
+        else:
+            config = self.config.clone()
+
+        config.defrost()
+        config.ENV_NAME = config.TEST.TEST_ENV_NAME
+        config.TASK_CONFIG.DATASET.SPLIT = config.TEST.SPLIT
+        config.TASK_CONFIG.TASK.MEASUREMENTS = []
+        config.TASK_CONFIG.TASK.SENSORS = [
+            "INSTRUCTION_SENSOR",
+            "HEADING_SENSOR",
+            "GLOBAL_GPS_SENSOR",
+        ]
+        config.TASK_CONFIG.ENVIRONMENT.ITERATOR_OPTIONS.SHUFFLE = False
+        config.TASK_CONFIG.ENVIRONMENT.ITERATOR_OPTIONS.MAX_SCENE_REPEAT_STEPS = (
+            -1
+        )
+        config.freeze()
+
+        # setup agent
+        self.envs = construct_envs_auto_reset_false(
+            config, get_env_class(config.ENV_NAME)
+        )
+        self.device = (
+            torch.device("cuda", config.TORCH_GPU_ID)
+            if torch.cuda.is_available()
+            else torch.device("cpu")
+        )
+
+        self._setup_actor_critic_agent(config.VLN)
+        self.actor_critic.load_state_dict(ckpt_dict["state_dict"])
+        observations = self.envs.reset()
+        observations = transform_obs(
+            observations, self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID
+        )
+        batch = batch_obs(observations, self.device)
+
+        recurrent_hidden_states = torch.zeros(
+            self.actor_critic.net.num_recurrent_layers,
+            self.config.NUM_PROCESSES,
+            self.config.VLN.STATE_ENCODER.hidden_size,
+            device=self.device,
+        )
+        prev_actions = torch.zeros(
+            self.config.NUM_PROCESSES, 1, device=self.device, dtype=torch.long
+        )
+        not_done_masks = torch.zeros(
+            self.config.NUM_PROCESSES, 1, device=self.device
+        )
+        self.actor_critic.eval()
+
+        collected_episode_ids = set()
+        trajectory_data = defaultdict(list)
+        buffer_trajectory_data = defaultdict(list)
+        while (
+            self.envs.num_envs > 0
+            and len(collected_episode_ids) < self.config.TEST_EPISODE_COUNT
+        ):
+            current_episodes = self.envs.current_episodes()
+
+            with torch.no_grad():
+                (
+                    _,
+                    actions,
+                    _,
+                    recurrent_hidden_states,
+                ) = self.actor_critic.act(
+                    batch,
+                    recurrent_hidden_states,
+                    prev_actions,
+                    not_done_masks,
+                    deterministic=True,
+                )
+                prev_actions.copy_(actions)
+
+            outputs = self.envs.step([a[0].item() for a in actions])
+            observations, dones = [list(x) for x in zip(*outputs)]
+
+            not_done_masks = torch.tensor(
+                [[0.0] if done else [1.0] for done in dones],
+                dtype=torch.float,
+                device=self.device,
+            )
+
+            # insert into trajectory data
+            for i in range(self.envs.num_envs):
+                k, v = trajectory_step_from_obs(observations[i])
+                buffer_trajectory_data[k].append(v)
+
+            # reset envs and observations if necessary
+            for i in range(self.envs.num_envs):
+                if not dones[i]:
+                    continue
+
+                if len(collected_episode_ids) < self.config.TEST_EPISODE_COUNT:
+                    k, _ = trajectory_step_from_obs(observations[i])
+                    trajectory_data[k] = copy.deepcopy(
+                        buffer_trajectory_data[k]
+                    )
+                    del buffer_trajectory_data[k]
+
+                observations[i] = self.envs.reset_at(i)[0]
+                prev_actions[i] = torch.zeros(1, dtype=torch.long)
+                collected_episode_ids.add(current_episodes[i].episode_id)
+
+                # insert starting position + heading trajectory data
+                k, v = trajectory_step_from_obs(observations[i])
+                buffer_trajectory_data[k].append(v)
+
+            observations = transform_obs(
+                observations,
+                self.config.TASK_CONFIG.TASK.INSTRUCTION_SENSOR_UUID,
+            )
+            batch = batch_obs(observations, self.device)
+
+            envs_to_pause = []
+            next_episodes = self.envs.current_episodes()
+            for i in range(self.envs.num_envs):
+                if next_episodes[i].episode_id in collected_episode_ids:
+                    envs_to_pause.append(i)
+
+            (
+                self.envs,
+                recurrent_hidden_states,
+                not_done_masks,
+                prev_actions,
+                batch,
+            ) = self._pause_envs(
+                envs_to_pause,
+                self.envs,
+                recurrent_hidden_states,
+                not_done_masks,
+                prev_actions,
+                batch,
+            )
+
+        self.envs.close()
+
+        split = config.TASK_CONFIG.DATASET.SPLIT
+        with open(f"trajectories_{split}_{checkpoint_index}.json", "w") as f:
+            json.dump(trajectory_data, f, indent=4)
 
     def _eval_checkpoint(
         self,

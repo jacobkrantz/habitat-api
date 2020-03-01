@@ -169,3 +169,13 @@ class VLNRLEnv(habitat.RLEnv):
 
     def get_info(self, observations):
         return self.habitat_env.get_metrics()
+
+
+@baseline_registry.register_env(name="VLNTestEnv")
+class VLNTestEnv(habitat.Env):
+    def __init__(self, config: Config, dataset: Optional[Dataset] = None):
+        super().__init__(config.TASK_CONFIG, dataset)
+
+    def step(self, *args, **kwargs):
+        observations = super().step(*args, **kwargs)
+        return observations, self.episode_over

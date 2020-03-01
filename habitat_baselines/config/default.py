@@ -45,6 +45,14 @@ _C.EVAL = CN()
 _C.EVAL.SPLIT = "val"
 _C.EVAL.USE_CKPT_CONFIG = True
 # -----------------------------------------------------------------------------
+# TEST CONFIG
+# -----------------------------------------------------------------------------
+_C.TEST = CN()
+_C.TEST.TEST_ENV_NAME = "VLNTestEnv"
+_C.TEST.USE_CKPT_CONFIG = True
+_C.TEST.SPLIT = "test"
+_C.TEST.CKPT_FILE = ""
+# -----------------------------------------------------------------------------
 # REINFORCEMENT LEARNING (RL) ENVIRONMENT CONFIG
 # -----------------------------------------------------------------------------
 _C.RL = CN()

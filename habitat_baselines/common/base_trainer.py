@@ -30,6 +30,9 @@ class BaseTrainer:
     def eval(self) -> None:
         raise NotImplementedError
 
+    def test(self) -> None:
+        raise NotImplementedError
+
     def save_checkpoint(self, file_name) -> None:
         raise NotImplementedError
 
@@ -152,6 +155,19 @@ class BaseRLTrainer(BaseTrainer):
                         writer=writer,
                         checkpoint_index=prev_ckpt_ind,
                     )
+
+    def test(self):
+        r"""Main method of trainer testing. Testing is for when a trajectory
+        must be generated but the oracle path and goal could be unknown. Calls
+        _test_checkpoint().
+
+        Returns:
+            None
+        """
+        assert os.path.isfile(
+            self.config.TEST.CKPT_FILE
+        ), "Checkpoint must be a file"
+        self._test_checkpoint(self.config.TEST.CKPT_FILE)
 
     def _setup_eval_config(self, checkpoint_config: Config) -> Config:
         r"""Sets up and returns a merged config for evaluation. Config

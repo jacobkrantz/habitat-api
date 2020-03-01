@@ -17,6 +17,11 @@ VIDEO_DIR: videos/debug
 EVAL:
   USE_CKPT_CONFIG: False
   SPLIT: val_seen
+TEST:
+  TEST_ENV_NAME: VLNTestEnv
+  USE_CKPT_CONFIG: False
+  SPLIT: test
+  CKPT_FILE: data/checkpoints/vln/ckpt.0.pth
 
 DAGGER:
   LR: 2.5e-4

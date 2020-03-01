@@ -110,6 +110,12 @@ _C.TASK.GPS_SENSOR = CN()
 _C.TASK.GPS_SENSOR.TYPE = "GPSSensor"
 _C.TASK.GPS_SENSOR.DIMENSIONALITY = 2
 # -----------------------------------------------------------------------------
+# GPS SENSOR
+# -----------------------------------------------------------------------------
+_C.TASK.GLOBAL_GPS_SENSOR = CN()
+_C.TASK.GLOBAL_GPS_SENSOR.TYPE = "GlobalGPSSensor"
+_C.TASK.GLOBAL_GPS_SENSOR.DIMENSIONALITY = 3
+# -----------------------------------------------------------------------------
 # PROXIMITY SENSOR
 # -----------------------------------------------------------------------------
 _C.TASK.PROXIMITY_SENSOR = CN()
