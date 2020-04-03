@@ -1,3 +1,5 @@
+import os.path as osp
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -186,8 +188,9 @@ class VlnResnetDepthEncoder(nn.Module):
         if "depth_features" in observations:
             x = observations["depth_features"]
         else:
-            x = self.visual_encoder(observations)
+            x = self.visual_encoder(observations).to(dtype=torch.float16)
 
+        x = x.to(dtype=next(self.parameters()).dtype)
         if self.spatial_output:
             b, c, h, w = x.size()
 
@@ -257,19 +260,29 @@ class TorchVisionResNet50(nn.Module):
         self.spatial_output = spatial_output
 
         if not self.spatial_output:
-            self.layer_extract = self.cnn._modules.get("avgpool")
             self.output_shape = (output_size,)
             self.fc = nn.Linear(linear_layer_input_size, output_size)
             self.activation = nn.Tanh() if activation == "tanh" else nn.ReLU()
         else:
-            self.layer_extract = self.cnn._modules.get("layer4")
-            self.spatial_embeddings = nn.Embedding(7 * 7, 64)
+
+            class SpatialAvgPool(nn.Module):
+                def forward(self, x):
+                    x = F.adaptive_avg_pool2d(x, (4, 4))
+
+                    return x
+
+            self.cnn.avgpool = SpatialAvgPool()
+            self.cnn.fc = nn.Sequential()
+
+            self.spatial_embeddings = nn.Embedding(4 * 4, 64)
 
             self.output_shape = (
                 self.resnet_layer_size + self.spatial_embeddings.embedding_dim,
-                7,
-                7,
+                4,
+                4,
             )
+
+        self.layer_extract = self.cnn._modules.get("avgpool")
 
     @property
     def is_blind(self):
@@ -301,8 +314,11 @@ class TorchVisionResNet50(nn.Module):
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT x WIDTH]
             rgb_observations = observations["rgb"].permute(0, 3, 1, 2)
             rgb_observations = rgb_observations / 255.0  # normalize RGB
-            resnet_output = resnet_forward(rgb_observations)
+            resnet_output = resnet_forward(rgb_observations).to(
+                dtype=torch.float16
+            )
 
+        resnet_output = resnet_output.to(dtype=next(self.parameters()).dtype)
         if self.spatial_output:
             b, c, h, w = resnet_output.size()
 

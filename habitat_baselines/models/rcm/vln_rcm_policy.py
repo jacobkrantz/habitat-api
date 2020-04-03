@@ -104,6 +104,7 @@ class VLNRCMNet(Net):
 
         hidden_size = vln_config.STATE_ENCODER.hidden_size
         self._hidden_size = hidden_size
+
         if self.rcm_state_encoder:
             self.state_encoder = RCMStateEncoder(
                 self.visual_encoder.output_shape[0],
@@ -142,11 +143,19 @@ class VLNRCMNet(Net):
                 rnn_type=vln_config.STATE_ENCODER.rnn_type,
             )
 
+        self._output_size = (
+            self.vln_config.STATE_ENCODER.hidden_size
+            + self.vln_config.VISUAL_ENCODER.output_size
+            + self.vln_config.DEPTH_ENCODER.output_size
+            + self.instruction_encoder.output_size
+        )
+
         self.rgb_kv = nn.Conv1d(
             self.visual_encoder.output_shape[0],
             hidden_size // 2 + vln_config.VISUAL_ENCODER.output_size,
             1,
         )
+
         self.depth_kv = nn.Conv1d(
             self.depth_encoder.output_shape[0],
             hidden_size // 2 + vln_config.DEPTH_ENCODER.output_size,
@@ -165,6 +174,22 @@ class VLNRCMNet(Net):
             "_scale", torch.tensor(1.0 / ((hidden_size // 2) ** 0.5))
         )
 
+        self.second_state_compress = nn.Sequential(
+            nn.Linear(
+                self._output_size + self.prev_action_embedding.embedding_dim,
+                self._hidden_size,
+            ),
+            nn.ReLU(True),
+        )
+
+        self.second_state_encoder = RNNStateEncoder(
+            input_size=self._hidden_size,
+            hidden_size=self._hidden_size,
+            num_layers=1,
+            rnn_type=vln_config.STATE_ENCODER.rnn_type,
+        )
+        self._output_size = vln_config.STATE_ENCODER.hidden_size
+
         self.progress_monitor = nn.Linear(self.output_size, 1)
 
         self._init_layers()
@@ -173,12 +198,7 @@ class VLNRCMNet(Net):
 
     @property
     def output_size(self):
-        return (
-            self.vln_config.STATE_ENCODER.hidden_size
-            + self.vln_config.VISUAL_ENCODER.output_size
-            + self.vln_config.DEPTH_ENCODER.output_size
-            + self.instruction_encoder.output_size
-        )
+        return self._output_size
 
     @property
     def is_blind(self):
@@ -186,7 +206,9 @@ class VLNRCMNet(Net):
 
     @property
     def num_recurrent_layers(self):
-        return self.state_encoder.num_recurrent_layers
+        return self.state_encoder.num_recurrent_layers + (
+            self.second_state_encoder.num_recurrent_layers
+        )
 
     def _init_layers(self):
         nn.init.kaiming_normal_(
@@ -234,8 +256,13 @@ class VLNRCMNet(Net):
             depth_in = self.depth_linear(depth_embedding)
 
             state_in = torch.cat([rgb_in, depth_in, prev_actions], dim=1)
-            state, rnn_hidden_states = self.state_encoder(
-                state_in, rnn_hidden_states, masks
+            (
+                state,
+                rnn_hidden_states[0 : self.state_encoder.num_recurrent_layers],
+            ) = self.state_encoder(
+                state_in,
+                rnn_hidden_states[0 : self.state_encoder.num_recurrent_layers],
+                masks,
             )
 
         text_state_q = self.state_q(state)
@@ -253,12 +280,27 @@ class VLNRCMNet(Net):
         )
 
         text_q = self.text_q(text_embedding)
-
         rgb_embedding = self._attn(text_q, rgb_k, rgb_v)
         depth_embedding = self._attn(text_q, depth_k, depth_v)
 
         x = torch.cat(
-            [state, text_embedding, rgb_embedding, depth_embedding], dim=1
+            [
+                state,
+                text_embedding,
+                rgb_embedding,
+                depth_embedding,
+                prev_actions,
+            ],
+            dim=1,
+        )
+        x = self.second_state_compress(x)
+        (
+            x,
+            rnn_hidden_states[self.state_encoder.num_recurrent_layers :],
+        ) = self.second_state_encoder(
+            x,
+            rnn_hidden_states[self.state_encoder.num_recurrent_layers :],
+            masks,
         )
 
         if self.vln_config.PROGRESS_MONITOR.use and AuxLosses.is_active():

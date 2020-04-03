@@ -40,14 +40,17 @@ class InstructionEncoder(nn.Module):
             )
 
         rnn = nn.GRU if self.config.rnn_type == "GRU" else nn.LSTM
+        self.bidir = config.bidirectional
         self.encoder_rnn = rnn(
-            input_size=config.embedding_size, hidden_size=config.hidden_size
+            input_size=config.embedding_size,
+            hidden_size=config.hidden_size,
+            bidirectional=self.bidir,
         )
         self.final_state_only = config.final_state_only
 
     @property
     def output_size(self):
-        return self.config.hidden_size
+        return self.config.hidden_size * (2 if self.bidir else 1)
 
     def _load_embeddings(self):
         """ Loads word embeddings from a pretrained embeddings file.
@@ -90,9 +93,8 @@ class InstructionEncoder(nn.Module):
         if self.config.rnn_type == "LSTM":
             final_state = final_state[0]
 
-        final_state = final_state.squeeze(0)
         if self.final_state_only:
-            return final_state
+            final_state.squeeze(0)
         else:
             return nn.utils.rnn.pad_packed_sequence(output, batch_first=True)[
                 0
