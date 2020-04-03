@@ -164,15 +164,23 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
         generated image of a single frame.
     """
     egocentric_view = []
+    observation_size = -1
     if "rgb" in observation:
         observation_size = observation["rgb"].shape[0]
-        egocentric_view.append(observation["rgb"][:, :, :3])
+        rgb = observation["rgb"][:, :, :3]
+        egocentric_view.append(rgb)
 
-    # draw depth map if observation has depth info
+    # draw depth map if observation has depth info. resize to rgb size.
     if "depth" in observation:
-        observation_size = observation["depth"].shape[0]
+        if observation_size == -1:
+            observation_size = observation["depth"].shape[0]
         depth_map = (observation["depth"].squeeze() * 255).astype(np.uint8)
         depth_map = np.stack([depth_map for _ in range(3)], axis=2)
+        depth_map = cv2.resize(
+            depth_map,
+            dsize=(observation_size, observation_size),
+            interpolation=cv2.INTER_CUBIC,
+        )
         egocentric_view.append(depth_map)
 
     assert (
