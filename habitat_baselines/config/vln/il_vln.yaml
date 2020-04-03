@@ -36,7 +36,6 @@ DAGGER:
   P: 0.75
   USE_IW: True
   # ~1.5TB (in bytes)
-  # 4 iterations of 5K update_size -> 1TB dataset
   LMDB_MAP_SIZE: 1.65e+12
   TF_PRELOAD_FEATURES: False
 
@@ -44,7 +43,7 @@ VLN:
   inflection_weight_coef: 3.2
   INSTRUCTION_ENCODER:
     vocab_size: 2504
-    max_length: 153
+    max_length: 200
     use_pretrained_embeddings: True
     embedding_file: ./data/datasets/vln/mp3d/r2r/v1/preprocessed/embeddings.json
     dataset_vocab: ./data/datasets/vln/mp3d/r2r/v1/preprocessed/train/train.json.gz
@@ -61,7 +60,6 @@ VLN:
   VISUAL_ENCODER:
     cnn_type: TorchVisionResNet50
     output_size: 256
-    activation: relu
   STATE_ENCODER:
     hidden_size: 512
     # Currently only works with GRU
@@ -69,6 +67,9 @@ VLN:
 
   BASELINE:
     use_prev_action: False
+    ablate_instruction: False
+    ablate_rgb: False
+    ablate_depth: False
 
   RCM:
     # Set to True to use the RCM model

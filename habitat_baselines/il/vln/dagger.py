@@ -368,7 +368,6 @@ class DaggerTrainer(BaseRLTrainer):
 
         episodes = [[] for _ in range(self.envs.num_envs)]
         skips = [False for _ in range(self.envs.num_envs)]
-        # Populate dones with False initially
         dones = [False for _ in range(self.envs.num_envs)]
 
         # https://arxiv.org/pdf/1011.0686.pdf
@@ -1197,11 +1196,13 @@ class DaggerTrainer(BaseRLTrainer):
             )
 
         split = config.TASK_CONFIG.DATASET.SPLIT
-        with open(f"stats_episodes_{checkpoint_index}_{split}.json", "w") as f:
+        with open(
+            f"stats_episodes_{self.config.RUN_NAME}_{checkpoint_index}_{split}.json",
+            "w",
+        ) as f:
             json.dump(aggregated_stats, f, indent=4)
 
         logger.info(f"Episodes evaluated: {num_episodes}")
-        checkpoint_num = checkpoint_index + 1
         for k, v in aggregated_stats.items():
             logger.info(f"Average episode {k}: {v:.6f}")
-            writer.add_scalar(f"eval_{split}_{k}", v, checkpoint_num)
+            writer.add_scalar(f"eval_{split}_{k}", v, checkpoint_index)

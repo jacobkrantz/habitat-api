@@ -139,14 +139,12 @@ _C.VLN.INSTRUCTION_ENCODER.embedding_size = 200
 _C.VLN.INSTRUCTION_ENCODER.hidden_size = 512
 _C.VLN.INSTRUCTION_ENCODER.rnn_type = "LSTM"
 _C.VLN.INSTRUCTION_ENCODER.final_state_only = True
-_C.VLN.INSTRUCTION_ENCODER.zero_out_features = False
 _C.VLN.INSTRUCTION_ENCODER.bidirectional = False
 _C.VLN.VISUAL_ENCODER = CN()
 # TODO create setting for SimpleCNN to process the combined RGB+Depth image.
 # VISUAL_ENCODER cnn_type must be of 'SimpleRGBCNN' or 'TorchVisionResNet50'
 _C.VLN.VISUAL_ENCODER.cnn_type = "SimpleRGBCNN"
 _C.VLN.VISUAL_ENCODER.output_size = 512
-_C.VLN.VISUAL_ENCODER.zero_out_features = False
 # relu or tanh
 _C.VLN.VISUAL_ENCODER.activation = "relu"
 _C.VLN.DEPTH_ENCODER = CN()
@@ -157,12 +155,14 @@ _C.VLN.DEPTH_ENCODER.output_size = 512
 _C.VLN.DEPTH_ENCODER.backbone = "NONE"
 # path to DDPPO resnet weights
 _C.VLN.DEPTH_ENCODER.ddppo_checkpoint = "NONE"
-_C.VLN.DEPTH_ENCODER.zero_out_features = False
 _C.VLN.STATE_ENCODER = CN()
 _C.VLN.STATE_ENCODER.hidden_size = 512
 _C.VLN.STATE_ENCODER.rnn_type = "GRU"
 _C.VLN.BASELINE = CN()
 _C.VLN.BASELINE.use_prev_action = False
+_C.VLN.BASELINE.ablate_depth = False
+_C.VLN.BASELINE.ablate_rgb = False
+_C.VLN.BASELINE.ablate_instruction = False
 _C.VLN.RCM = CN()
 _C.VLN.RCM.use = False
 _C.VLN.RCM.rcm_state_encoder = True

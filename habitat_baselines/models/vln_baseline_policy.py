@@ -154,11 +154,11 @@ class VLNBaselineNet(Net):
         depth_embedding = self.depth_encoder(observations)
         rgb_embedding = self.visual_encoder(observations)
 
-        if self.vln_config.INSTRUCTION_ENCODER.zero_out_features:
+        if self.vln_config.BASELINE.ablate_instruction:
             instruction_embedding = instruction_embedding * 0
-        if self.vln_config.DEPTH_ENCODER.zero_out_features:
+        if self.vln_config.BASELINE.ablate_depth:
             depth_embedding = depth_embedding * 0
-        if self.vln_config.VISUAL_ENCODER.zero_out_features:
+        if self.vln_config.BASELINE.ablate_rgb:
             rgb_embedding = rgb_embedding * 0
 
         x = torch.cat(
